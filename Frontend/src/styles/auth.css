@@ -1,0 +1,77 @@
+.auth-container {
+  width: 360px;
+  margin: 100px auto;
+  padding: 35px;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  background-color: #fff;
+  text-align: center;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.auth-container h2 {
+  margin-bottom: 20px;
+  color: #333;
+}
+
+.auth-container input {
+  width: 90%;
+  padding: 12px;
+  margin: 10px 0;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 1rem;
+}
+
+.Button {
+  width: 95%;
+  padding: 12px;
+  background: #007bff;
+  color: #fff;
+  margin-top: 10px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.Button:hover {
+  background: #0056b3;
+}
+
+.auth-container p {
+  margin-top: 10px;
+}
+
+.auth-container a {
+  color: #007bff;
+  text-decoration: none;
+}
+.error-text {
+  color: red;
+  margin: -5px 0px 0px 10px !important;
+  text-align: left;
+}
+.auth-container a:hover {
+  text-decoration: underline;
+}
+
+.socail-lcon {
+  margin-top: 20px;
+}
+
+.social-icon {
+  margin-top: 10px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn:hover {
+  transform: scale(1.05);
+}
+
+.btn:active {
+  transform: scale(0.95);
+}
