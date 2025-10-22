@@ -5,7 +5,7 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { Strategy as GitHubStrategy } from "passport-github2";
 
 import dotenv from "dotenv";
-import { sendOtpEmail } from "../utils/mailer.js";
+import { sendOtpEmail, sendWelcomeEmail } from "../utils/mailer.js";
 dotenv.config();
 
 //  REGISTER
@@ -66,7 +66,7 @@ export const userVerifyotp = async (req, res) => {
     user.otp = undefined;
     user.otpExpires = undefined;
     await user.save();
-
+    await sendWelcomeEmail(user.email, user.name);
     res.status(200).json({ message: "Email verified successfully!" });
   } catch (err) {
     res.status(500).json({ message: "Server error" });
