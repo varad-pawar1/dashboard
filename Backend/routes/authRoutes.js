@@ -7,6 +7,7 @@ import {
   githubAuth,
   githubAuthCallback,
   logOut,
+  userVerifyotp,
 } from "../controllers/authController.js";
 
 const router = Router();
@@ -14,6 +15,7 @@ const router = Router();
 // Register & Login
 router.post("/signup", registerUser);
 router.post("/login", loginUser);
+router.post("/verify-otp", userVerifyotp);
 router.post("/logout", logOut);
 // Google OAuth
 router.get("/google", googleAuth);

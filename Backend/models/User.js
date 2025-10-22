@@ -4,26 +4,24 @@ import bcrypt from "bcryptjs";
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-
-  // Password only required if not using OAuth
   password: {
     type: String,
     required: function () {
       return !this.googleId && !this.githubId;
     },
   },
-
   avatar: { type: String },
-
-  // Track OAuth providers
   googleId: { type: String, default: null },
   githubId: { type: String, default: null },
   providers: [
     { type: String, enum: ["email", "google", "github"], required: true },
   ],
+  isVerified: { type: Boolean, default: false },
+  otp: { type: String },
+  otpExpires: { type: Date },
 });
 
-// Hash password if changed
+// Hash password before saving
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
   const salt = await bcrypt.genSalt(10);

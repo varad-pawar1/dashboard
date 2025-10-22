@@ -30,8 +30,8 @@ export default function Signup() {
       return alert(Object.values(errors).join("\n"));
     try {
       await dispatch(signupUser(form));
-      alert("Signup successful!");
-      navigate("/login");
+      alert("Signup successful! Please check your email for OTP.");
+      navigate("/verify-otp");
     } catch (err) {
       alert(err);
     }

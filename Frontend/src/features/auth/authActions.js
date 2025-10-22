@@ -1,5 +1,3 @@
-// src/features/auth/authActions.js
-
 import API from "../../api/auth";
 import APIADMIN from "../../api/admin";
 import {
@@ -15,6 +13,9 @@ import {
   FETCH_USER_SUCCESS,
   FETCH_USER_FAILURE,
   LOGOUT,
+  VERIFY_OTP_REQUEST,
+  VERIFY_OTP_SUCCESS,
+  VERIFY_OTP_FAILURE,
 } from "./authReducer";
 
 // ----- Action Creators -----
@@ -77,5 +78,19 @@ export const logout = () => async (dispatch) => {
   } catch (err) {
     console.error("Logout failed:", err);
     dispatch({ type: LOGOUT });
+  }
+};
+
+export const verifyOtp = (data) => async (dispatch) => {
+  dispatch({ type: VERIFY_OTP_REQUEST });
+  try {
+    const res = await API.post("/verify-otp", data);
+    dispatch({ type: VERIFY_OTP_SUCCESS });
+    dispatch(resetForm());
+    return res.data;
+  } catch (err) {
+    const message = err.response?.data?.message || "OTP verification failed";
+    dispatch({ type: VERIFY_OTP_FAILURE, payload: message });
+    return Promise.reject(message);
   }
 };

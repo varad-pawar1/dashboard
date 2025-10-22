@@ -16,6 +16,10 @@ export const FETCH_USER_FAILURE = "auth/FETCH_USER_FAILURE";
 
 export const LOGOUT = "auth/LOGOUT";
 
+export const VERIFY_OTP_REQUEST = "auth/VERIFY_OTP_REQUEST";
+export const VERIFY_OTP_SUCCESS = "auth/VERIFY_OTP_SUCCESS";
+export const VERIFY_OTP_FAILURE = "auth/VERIFY_OTP_FAILURE";
+
 // ----- Initial State -----
 const initialState = {
   user: null,
@@ -25,6 +29,7 @@ const initialState = {
     name: "",
     email: "",
     password: "",
+    otp: "",
   },
 };
 
@@ -36,30 +41,26 @@ export default function authReducer(state = initialState, action) {
         ...state,
         form: { ...state.form, [action.payload.field]: action.payload.value },
       };
-
     case RESET_FORM:
       return { ...state, form: initialState.form };
-
     case SIGNUP_REQUEST:
     case LOGIN_REQUEST:
     case FETCH_USER_REQUEST:
+    case VERIFY_OTP_REQUEST:
       return { ...state, loading: true, error: null };
-
     case SIGNUP_SUCCESS:
+    case VERIFY_OTP_SUCCESS:
       return { ...state, loading: false };
-
     case LOGIN_SUCCESS:
     case FETCH_USER_SUCCESS:
       return { ...state, loading: false, user: action.payload };
-
     case SIGNUP_FAILURE:
     case LOGIN_FAILURE:
     case FETCH_USER_FAILURE:
+    case VERIFY_OTP_FAILURE:
       return { ...state, loading: false, error: action.payload };
-
     case LOGOUT:
       return { ...state, user: null, error: null, form: initialState.form };
-
     default:
       return state;
   }

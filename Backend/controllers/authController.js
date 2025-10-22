@@ -5,9 +5,11 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { Strategy as GitHubStrategy } from "passport-github2";
 
 import dotenv from "dotenv";
+import { sendOtpEmail } from "../utils/mailer.js";
 dotenv.config();
 
 //  REGISTER
+
 export const registerUser = async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -15,27 +17,59 @@ export const registerUser = async (req, res) => {
       return res.status(400).json({ message: "All fields are required" });
 
     const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      // Add "email" provider if not already added
-      if (!existingUser.providers.includes("email")) {
-        existingUser.providers.push("email");
-        existingUser.password = password; // update password
-        await existingUser.save();
-      }
+    if (existingUser)
       return res.status(400).json({ message: "User already exists" });
-    }
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 min expiry
 
     const newUser = new User({
       name,
       email,
       password,
       providers: ["email"],
+      otp,
+      otpExpires,
     });
     await newUser.save();
 
-    res.status(201).json({ message: "User registered successfully" });
+    // Send OTP via email
+    await sendOtpEmail(email, otp);
+
+    res.status(201).json({
+      message: "Registration successful! OTP sent to your email.",
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error(error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const userVerifyotp = async (req, res) => {
+  const { email, otp } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+    if (!user) return res.status(400).json({ message: "User not found" });
+
+    if (user.isVerified)
+      return res.status(400).json({ message: "User already verified" });
+
+    if (user.otp !== otp)
+      return res.status(400).json({ message: "Invalid OTP" });
+
+    if (user.otpExpires < new Date())
+      return res.status(400).json({ message: "OTP expired" });
+
+    user.isVerified = true;
+    user.otp = undefined;
+    user.otpExpires = undefined;
+    await user.save();
+
+    res.status(200).json({ message: "Email verified successfully!" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -43,7 +77,6 @@ export const registerUser = async (req, res) => {
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
-
     if (!email || !password)
       return res
         .status(400)
@@ -51,6 +84,13 @@ export const loginUser = async (req, res) => {
 
     const user = await User.findOne({ email });
     if (!user) return res.status(400).json({ message: "User not found" });
+
+    // Only allow login if verified
+    if (user.providers.includes("email") && !user.isVerified) {
+      return res
+        .status(403)
+        .json({ message: "Please verify your email using OTP first." });
+    }
 
     // Check if user signed up via email/password
     if (user.providers.includes("email")) {
