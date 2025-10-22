@@ -5,6 +5,8 @@ import Button from "../components/Button";
 import { loginUser, setField } from "../features/auth/authActions";
 
 export default function Login() {
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
+
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { form, loading, error } = useSelector((state) => state.auth);
@@ -30,18 +32,20 @@ export default function Login() {
       navigate("/dashboard");
     } catch (err) {
       if (err.includes("Google"))
-        window.location.href = "http://localhost:5000/auth/google";
+        window.location.href = `${BACKEND_URL}/auth/google`;
       else if (err.includes("GitHub"))
-        window.location.href = "http://localhost:5000/auth/github";
+        window.location.href = `${BACKEND_URL}/auth/github`;
       else alert(err);
     }
   };
 
-  const handleGoogleLogin = () =>
-    (window.location.href = "http://localhost:5000/auth/google");
-  const handleGithubLogin = () =>
-    (window.location.href = "http://localhost:5000/auth/github");
+  const handleGoogleLogin = () => {
+    window.location.href = `${BACKEND_URL}/auth/google`;
+  };
 
+  const handleGithubLogin = () => {
+    window.location.href = `${BACKEND_URL}/auth/github`;
+  };
   return (
     <div className="auth-container">
       <h2>Login</h2>

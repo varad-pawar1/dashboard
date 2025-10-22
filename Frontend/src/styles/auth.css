@@ -49,7 +49,7 @@
 }
 .error-text {
   color: red;
-  margin: -5px 0px 0px 10px !important;
+  margin: 5px 0px 0px 10px !important;
   text-align: left;
 }
 .auth-container a:hover {

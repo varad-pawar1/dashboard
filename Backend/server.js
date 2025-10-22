@@ -20,19 +20,19 @@ connectDB();
 
 // ======= Middlewares =======
 
-// ✅ Allow frontend cookies + requests
+// Allow frontend cookies + requests
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: process.env.FRONTEND_URL,
     credentials: true,
   })
 );
 
-// ✅ Parse JSON and cookies
+//  Parse JSON and cookies
 app.use(express.json());
 app.use(cookieParser());
 
-// ✅ Express session (for passport OAuth)
+//  Express session (for passport OAuth)
 app.use(
   session({
     secret: process.env.SESSION_SECRET || process.env.JWT_SECRET, // better to keep SESSION_SECRET separate
@@ -47,7 +47,7 @@ app.use(
   })
 );
 
-// ✅ Initialize Passport
+// Initialize Passport
 app.use(passport.initialize());
 app.use(passport.session());
 
@@ -71,5 +71,5 @@ app.use("/admin", routerAdmin);
 // ======= Start Server =======
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
+  console.log(`Server running at http://localhost:${PORT}`);
 });

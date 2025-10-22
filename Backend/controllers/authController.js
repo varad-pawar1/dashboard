@@ -7,7 +7,7 @@ import { Strategy as GitHubStrategy } from "passport-github2";
 import dotenv from "dotenv";
 dotenv.config();
 
-// ==================== REGISTER ====================
+//  REGISTER
 export const registerUser = async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -39,7 +39,7 @@ export const registerUser = async (req, res) => {
   }
 };
 
-// ==================== LOGIN ====================
+//  LOGIN
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -101,7 +101,7 @@ export const logOut = async (req, res) => {
   }
 };
 
-// ==================== GOOGLE STRATEGY ====================
+//  GOOGLE STRATEGY
 passport.serializeUser((user, done) => done(null, user._id));
 passport.deserializeUser(async (id, done) => {
   const user = await User.findById(id);
@@ -144,7 +144,7 @@ passport.use(
   )
 );
 
-// ==================== GOOGLE LOGIN HANDLERS ====================
+//  GOOGLE LOGIN HANDLERS
 export const googleAuth = (req, res, next) => {
   passport.authenticate("google", { scope: ["profile", "email"] })(
     req,

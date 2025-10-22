@@ -9,10 +9,8 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { user, loading, error } = useSelector((state) => state.auth);
 
-  // Fetch user from Redux when Dashboard mounts
   useEffect(() => {
     dispatch(fetchUser()).catch(() => {
-      // If user not authenticated, redirect to login
       navigate("/login");
     });
   }, [dispatch, navigate]);
