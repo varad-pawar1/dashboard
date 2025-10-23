@@ -13,13 +13,18 @@ export default function ForgotPassword() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.email.trim()) return alert("Email is required");
+
+    if (!form.email.trim()) {
+      alert("Email is required");
+      return;
+    }
+
     try {
       await dispatch(sendResetOtp(form.email));
       alert("OTP sent! Check your email.");
       navigate("/verify-reset-otp");
     } catch (err) {
-      alert(err);
+      alert(err.message || "Failed to send OTP");
     }
   };
 
@@ -31,9 +36,11 @@ export default function ForgotPassword() {
           type="email"
           placeholder="Enter your email"
           value={form.email}
-          onChange={(e) => dispatch(setField("email", e.target.value))}
+          onChange={(e) => dispatch(setField("email", e))}
         />
+
         <Button label={loading ? "Sending..." : "Send OTP"} type="submit" />
+
         {error && <p className="error-text">{error}</p>}
         {successMessage && <p className="success-text">{successMessage}</p>}
       </form>

@@ -22,10 +22,11 @@ export default function Dashboard() {
   const handleSendResetLink = async () => {
     if (!user?.email) return;
     setSendingLink(true);
+
     try {
       await dispatch(sendResetLink(user.email));
     } catch (err) {
-      console.error(err.message);
+      console.error(err.message || err);
     } finally {
       setSendingLink(false);
     }
@@ -45,7 +46,7 @@ export default function Dashboard() {
           <h2>Welcome, {user.name} 🎉</h2>
           <p>Email: {user.email}</p>
 
-          <div style={{ marginTop: "20px" }}>
+          <div style={{ marginTop: "20px", display: "flex", gap: "10px" }}>
             <Button label="Logout" onClick={handleLogout} variant="Button" />
             <Button
               label={sendingLink ? "Sending..." : "Send Reset Link"}

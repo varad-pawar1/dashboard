@@ -9,25 +9,14 @@ export default function Signup() {
   const navigate = useNavigate();
   const { form, loading, error } = useSelector((state) => state.auth);
 
-  const validateForm = () => {
-    const newErrors = {};
-    if (!form.name.trim()) newErrors.name = "Full name is required";
-    else if (form.name.trim().length < 3)
-      newErrors.name = "Name must be at least 3 characters long";
-    if (!form.email.trim()) newErrors.email = "Email is required";
-    else if (!/\S+@\S+\.\S+/.test(form.email))
-      newErrors.email = "Enter a valid email";
-    if (!form.password.trim()) newErrors.password = "Password is required";
-    else if (form.password.length < 6)
-      newErrors.password = "Password must be at least 6 characters";
-    return newErrors;
-  };
-
   const handleSignup = async (e) => {
     e.preventDefault();
-    const errors = validateForm();
-    if (Object.keys(errors).length)
-      return alert(Object.values(errors).join("\n"));
+
+    // Optional: final validation before submit
+    if (!form.name || !form.email || !form.password) {
+      return alert("Please fill all fields correctly.");
+    }
+
     try {
       await dispatch(signupUser(form));
       alert("Signup successful! Please check your email for OTP.");
@@ -38,41 +27,47 @@ export default function Signup() {
   };
 
   return (
-    <div className="auth-container">
+    <div
+      className="auth-container"
+      style={{ maxWidth: "400px", margin: "auto" }}
+    >
       <h2>Sign Up</h2>
       <form onSubmit={handleSignup}>
-        <div>
-          <InputField
-            type="text"
-            placeholder="Full Name"
-            value={form.name}
-            onChange={(e) => dispatch(setField("name", e.target.value))}
-          />
-        </div>
-        <div>
-          <InputField
-            type="email"
-            placeholder="Email"
-            value={form.email}
-            onChange={(e) => dispatch(setField("email", e.target.value))}
-          />
-        </div>
-        <div>
-          <InputField
-            type="password"
-            placeholder="Password"
-            value={form.password}
-            onChange={(e) => dispatch(setField("password", e.target.value))}
-          />
-        </div>
+        <InputField
+          type="text"
+          placeholder="Full Name"
+          value={form.name}
+          onChange={(val) => dispatch(setField("name", val))}
+        />
+
+        <InputField
+          type="email"
+          placeholder="Email"
+          value={form.email}
+          onChange={(val) => dispatch(setField("email", val))}
+        />
+
+        <InputField
+          type="password"
+          placeholder="Password"
+          value={form.password}
+          onChange={(val) => dispatch(setField("password", val))}
+        />
+
         <Button
           label={loading ? "Loading..." : "Sign Up"}
           type="submit"
           variant="Button"
         />
-        {error && <p className="error-text">{error}</p>}
+
+        {error && (
+          <p className="error-text" style={{ color: "red" }}>
+            {error}
+          </p>
+        )}
       </form>
-      <p>
+
+      <p style={{ marginTop: "10px" }}>
         Already have an account? <Link to="/login">Login</Link>
       </p>
     </div>

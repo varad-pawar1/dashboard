@@ -13,8 +13,6 @@ export default function ResetPassword() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (newPassword.length < 6)
-      return alert("Password must be at least 6 characters");
     try {
       await dispatch(resetPasswordAction(form.email, newPassword));
       alert("Password reset successful! Login now.");
@@ -32,13 +30,13 @@ export default function ResetPassword() {
           type="email"
           placeholder="Email"
           value={form.email}
-          onChange={(e) => dispatch(setField("email", e.target.value))}
+          onChange={(val) => dispatch(setField("email", val))}
         />
         <InputField
           type="password"
           placeholder="New Password"
           value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
+          onChange={setNewPassword}
         />
         <Button
           label={loading ? "Resetting..." : "Reset Password"}

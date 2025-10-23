@@ -42,20 +42,28 @@ export const sendResetLink = async (req, res) => {
 export const resetPassword = async (req, res) => {
   const { token } = req.params;
   const { password } = req.body;
+
   try {
+    // Find the user with a valid reset token
     const user = await User.findOne({
       resetToken: token,
       resetTokenExpiry: { $gt: Date.now() },
     });
-    if (!user)
-      return res.status(400).json({ message: "Invalid or expired token" });
 
-    user.password = password; // hashed automatically
+    if (!user) {
+      return res.status(400).json({ message: "Invalid or expired token" });
+    }
+
+    // Update password (pre-save hook hashes it automatically)
+    user.password = password;
+
+    // Clear reset token and expiry
     user.resetToken = undefined;
     user.resetTokenExpiry = undefined;
+
     await user.save();
 
-    res.json({ message: "Password reset successful" });
+    res.status(200).json({ message: "Password reset successful" });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });

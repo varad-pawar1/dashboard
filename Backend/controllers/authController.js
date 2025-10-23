@@ -20,7 +20,7 @@ export const registerUser = async (req, res) => {
       return res.status(400).json({ message: "User already exists" });
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+    const otpExpires = new Date(Date.now() + 30 * 60 * 1000);
 
     const newUser = new User({
       name,
