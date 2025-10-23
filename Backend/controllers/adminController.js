@@ -1,7 +1,7 @@
 import User from "../models/User.js";
 import dotenv from "dotenv";
 import { sendResetLinkEmail } from "../utils/mailer.js";
-import crypto from "crypto";
+import jwt from "jsonwebtoken";
 dotenv.config();
 
 export const getMe = async (req, res) => {
@@ -12,20 +12,21 @@ export const getMe = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
 // Send reset link
 export const sendResetLink = async (req, res) => {
-  const { email } = req.body; // get email from frontend
+  const { email } = req.body;
+
   try {
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // Create token
-    const resetToken = crypto.randomBytes(20).toString("hex");
-    const resetTokenExpiry = Date.now() + 10 * 60 * 1000; // 10 minutes
-
-    user.resetToken = resetToken;
-    user.resetTokenExpiry = resetTokenExpiry;
-    await user.save();
+    // Create JWT token with user id and expiration
+    const resetToken = jwt.sign(
+      { userId: user._id },
+      process.env.JWT_RESET_SECRET, // separate secret for reset
+      { expiresIn: "30m" } // token valid for 30 minutes
+    );
 
     // Send email
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
@@ -44,28 +45,25 @@ export const resetPassword = async (req, res) => {
   const { password } = req.body;
 
   try {
-    // Find the user with a valid reset token
-    const user = await User.findOne({
-      resetToken: token,
-      resetTokenExpiry: { $gt: Date.now() },
-    });
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_RESET_SECRET);
 
+    // Find user
+    const user = await User.findById(decoded.userId);
     if (!user) {
-      return res.status(400).json({ message: "Invalid or expired token" });
+      return res.status(404).json({ message: "User not found" });
     }
 
-    // Update password (pre-save hook hashes it automatically)
+    // Update password (pre-save hook hashes automatically)
     user.password = password;
-
-    // Clear reset token and expiry
-    user.resetToken = undefined;
-    user.resetTokenExpiry = undefined;
-
     await user.save();
 
     res.status(200).json({ message: "Password reset successful" });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Server error" });
+    if (err.name === "TokenExpiredError") {
+      return res.status(400).json({ message: "Token has expired" });
+    }
+    res.status(400).json({ message: "Invalid token" });
   }
 };
