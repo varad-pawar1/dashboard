@@ -7,6 +7,7 @@ import VerificationOtp from "../pages/VerificationOtp";
 import ForgotPassword from "../pages/ForgotPassword";
 import VerifyForgotOTP from "../pages/VerifyForgotOTP";
 import ResetPassword from "../pages/ResetPassword";
+import LGResetPassword from "../pages/LGResetPassword";
 
 export default function AppRouter() {
   return (
@@ -20,6 +21,7 @@ export default function AppRouter() {
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/verify-reset-otp" element={<VerifyForgotOTP />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/reset-password/:token" element={<LGResetPassword />} />
       </Routes>
     </BrowserRouter>
   );

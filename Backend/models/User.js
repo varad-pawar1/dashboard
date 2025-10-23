@@ -25,6 +25,10 @@ const userSchema = new mongoose.Schema({
   resetOtp: { type: String },
   resetOtpExpires: { type: Date },
   isResetVerified: { type: Boolean, default: false },
+
+  // --- For Reset Password ---
+  resetToken: { type: String },
+  resetTokenExpiry: { type: Date },
 });
 
 // Hash password before saving

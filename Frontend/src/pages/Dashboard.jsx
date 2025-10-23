@@ -1,38 +1,65 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import Button from "../components/Button";
 import { logout } from "../features/auth/authActions";
-import { fetchUser } from "../features/auth/AdminActions";
+import { fetchUser, sendResetLink } from "../features/auth/adminActions";
 
 export default function Dashboard() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { user, loading, error } = useSelector((state) => state.admin);
 
+  const { user, loading, successMessage, error } = useSelector(
+    (state) => state.admin
+  );
+  const [sendingLink, setSendingLink] = useState(false);
+
+  // Fetch logged-in user on mount
   useEffect(() => {
-    dispatch(fetchUser()).catch(() => {
-      navigate("/login");
-    });
+    dispatch(fetchUser()).catch(() => navigate("/login"));
   }, [dispatch, navigate]);
+
+  const handleSendResetLink = async () => {
+    if (!user?.email) return;
+    setSendingLink(true);
+    try {
+      await dispatch(sendResetLink(user.email));
+    } catch (err) {
+      console.error(err.message);
+    } finally {
+      setSendingLink(false);
+    }
+  };
 
   const handleLogout = () => {
     dispatch(logout());
     navigate("/login");
   };
 
-  if (loading) return <div className="auth-container">Loading user...</div>;
-
   return (
     <div className="auth-container">
-      {user ? (
+      {loading ? (
+        <p>Loading user data...</p>
+      ) : user ? (
         <>
           <h2>Welcome, {user.name} 🎉</h2>
           <p>Email: {user.email}</p>
-          <Button label="Logout" onClick={handleLogout} variant="Button" />
+
+          <div style={{ marginTop: "20px" }}>
+            <Button label="Logout" onClick={handleLogout} variant="Button" />
+            <Button
+              label={sendingLink ? "Sending..." : "Send Reset Link"}
+              onClick={handleSendResetLink}
+              variant="Button"
+              disabled={sendingLink}
+            />
+          </div>
+
+          {successMessage && <p className="success">{successMessage}</p>}
+          {error && <p className="error">{error}</p>}
         </>
       ) : (
-        <p>No user data available.</p>
+        <p>No user data available. Please login again.</p>
       )}
     </div>
   );
