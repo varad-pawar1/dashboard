@@ -16,9 +16,15 @@ const userSchema = new mongoose.Schema({
   providers: [
     { type: String, enum: ["email", "google", "github"], required: true },
   ],
+  // --- For email verification ---
   isVerified: { type: Boolean, default: false },
-  otp: { type: String },
+  otp: { type: String }, // verification OTP
   otpExpires: { type: Date },
+
+  // --- For password reset ---
+  resetOtp: { type: String },
+  resetOtpExpires: { type: Date },
+  isResetVerified: { type: Boolean, default: false },
 });
 
 // Hash password before saving

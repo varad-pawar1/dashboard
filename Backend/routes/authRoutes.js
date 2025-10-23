@@ -8,6 +8,9 @@ import {
   githubAuthCallback,
   logOut,
   userVerifyotp,
+  forgotPassword,
+  verifyResetOtp,
+  resetPassword,
 } from "../controllers/authController.js";
 
 const router = Router();
@@ -17,6 +20,12 @@ router.post("/signup", registerUser);
 router.post("/login", loginUser);
 router.post("/verify-otp", userVerifyotp);
 router.post("/logout", logOut);
+
+// Forgot Password Flow
+router.post("/forgot-password", forgotPassword);
+router.post("/verify-reset-otp", verifyResetOtp);
+router.post("/reset-password", resetPassword);
+
 // Google OAuth
 router.get("/google", googleAuth);
 router.get("/google/callback", googleAuthCallback);

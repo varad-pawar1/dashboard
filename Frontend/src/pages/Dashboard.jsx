@@ -2,12 +2,13 @@ import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import Button from "../components/Button";
-import { fetchUser, logout } from "../features/auth/authActions";
+import { logout } from "../features/auth/authActions";
+import { fetchUser } from "../features/auth/AdminActions";
 
 export default function Dashboard() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { user, loading, error } = useSelector((state) => state.auth);
+  const { user, loading, error } = useSelector((state) => state.admin);
 
   useEffect(() => {
     dispatch(fetchUser()).catch(() => {
@@ -26,13 +27,12 @@ export default function Dashboard() {
     <div className="auth-container">
       {user ? (
         <>
-          <h2 className="">Welcome, {user.name} 🎉</h2>
-          <p className="">Email: {user.email}</p>
-
-          <Button label={"Logout"} onClick={handleLogout} variant="Button" />
+          <h2>Welcome, {user.name} 🎉</h2>
+          <p>Email: {user.email}</p>
+          <Button label="Logout" onClick={handleLogout} variant="Button" />
         </>
       ) : (
-        <p className="">No user data available.</p>
+        <p>No user data available.</p>
       )}
     </div>
   );

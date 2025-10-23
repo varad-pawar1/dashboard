@@ -9,22 +9,26 @@ import {
   LOGIN_REQUEST,
   LOGIN_SUCCESS,
   LOGIN_FAILURE,
-  FETCH_USER_REQUEST,
-  FETCH_USER_SUCCESS,
-  FETCH_USER_FAILURE,
   LOGOUT,
   VERIFY_OTP_REQUEST,
   VERIFY_OTP_SUCCESS,
   VERIFY_OTP_FAILURE,
+  FORGOT_PASSWORD_REQUEST,
+  FORGOT_PASSWORD_SUCCESS,
+  FORGOT_PASSWORD_FAILURE,
+  RESET_PASSWORD_REQUEST,
+  RESET_PASSWORD_SUCCESS,
+  RESET_PASSWORD_FAILURE,
+  VERIFY_RESET_OTP_REQUEST,
+  VERIFY_RESET_OTP_SUCCESS,
+  VERIFY_RESET_OTP_FAILURE,
 } from "./authReducer";
 
-// ----- Action Creators -----
-
+// ----- Field Actions -----
 export const setField = (field, value) => ({
   type: SET_FIELD,
   payload: { field, value },
 });
-
 export const resetForm = () => ({ type: RESET_FORM });
 
 // ----- Signup -----
@@ -38,6 +42,20 @@ export const signupUser = (data) => async (dispatch) => {
   } catch (err) {
     const message = err.response?.data?.message || "Signup failed";
     dispatch({ type: SIGNUP_FAILURE, payload: message });
+    return Promise.reject(message);
+  }
+};
+
+export const verifyOtp = (data) => async (dispatch) => {
+  dispatch({ type: VERIFY_OTP_REQUEST });
+  try {
+    const res = await API.post("/verify-otp", data);
+    dispatch({ type: VERIFY_OTP_SUCCESS });
+    dispatch(resetForm());
+    return res.data;
+  } catch (err) {
+    const message = err.response?.data?.message || "OTP verification failed";
+    dispatch({ type: VERIFY_OTP_FAILURE, payload: message });
     return Promise.reject(message);
   }
 };
@@ -57,19 +75,6 @@ export const loginUser = (data) => async (dispatch) => {
   }
 };
 
-// ----- Fetch User -----
-export const fetchUser = () => async (dispatch) => {
-  dispatch({ type: FETCH_USER_REQUEST });
-  try {
-    const res = await APIADMIN.get("/me", { withCredentials: true });
-    dispatch({ type: FETCH_USER_SUCCESS, payload: res.data.user });
-    return res.data.user;
-  } catch (err) {
-    dispatch({ type: FETCH_USER_FAILURE, payload: "User not authenticated" });
-    return Promise.reject("User not authenticated");
-  }
-};
-
 // ----- Logout -----
 export const logout = () => async (dispatch) => {
   try {
@@ -81,16 +86,46 @@ export const logout = () => async (dispatch) => {
   }
 };
 
-export const verifyOtp = (data) => async (dispatch) => {
-  dispatch({ type: VERIFY_OTP_REQUEST });
+// ----- Forgot Password -----
+export const sendResetOtp = (email) => async (dispatch) => {
+  dispatch({ type: FORGOT_PASSWORD_REQUEST });
   try {
-    const res = await API.post("/verify-otp", data);
-    dispatch({ type: VERIFY_OTP_SUCCESS });
+    const res = await API.post("/forgot-password", { email });
+    dispatch({ type: FORGOT_PASSWORD_SUCCESS, payload: res.data.message });
     dispatch(resetForm());
     return res.data;
   } catch (err) {
+    const message = err.response?.data?.message || "Failed to send OTP";
+    dispatch({ type: FORGOT_PASSWORD_FAILURE, payload: message });
+    return Promise.reject(message);
+  }
+};
+
+// ----- Verify Reset OTP -----
+export const verifyResetOtpAction = (email, otp) => async (dispatch) => {
+  dispatch({ type: VERIFY_RESET_OTP_REQUEST });
+  try {
+    const res = await API.post("/verify-reset-otp", { email, otp });
+    dispatch({ type: VERIFY_RESET_OTP_SUCCESS, payload: res.data.message });
+    return res.data;
+  } catch (err) {
     const message = err.response?.data?.message || "OTP verification failed";
-    dispatch({ type: VERIFY_OTP_FAILURE, payload: message });
+    dispatch({ type: VERIFY_RESET_OTP_FAILURE, payload: message });
+    return Promise.reject(message);
+  }
+};
+
+// ----- Reset Password -----
+export const resetPasswordAction = (email, newPassword) => async (dispatch) => {
+  dispatch({ type: RESET_PASSWORD_REQUEST });
+  try {
+    const res = await API.post("/reset-password", { email, newPassword });
+    dispatch({ type: RESET_PASSWORD_SUCCESS, payload: res.data.message });
+    dispatch(resetForm());
+    return res.data;
+  } catch (err) {
+    const message = err.response?.data?.message || "Password reset failed";
+    dispatch({ type: RESET_PASSWORD_FAILURE, payload: message });
     return Promise.reject(message);
   }
 };

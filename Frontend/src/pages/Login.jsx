@@ -73,12 +73,16 @@ export default function Login() {
         />
         {error && <p className="error-text">{error}</p>}
       </form>
+      <p style={{ textAlign: "left" }}>
+        Forgot Password? <Link to="/forgot-password">Click here</Link>
+      </p>
       <div className="social-icon">
         <Button
           onClick={handleGoogleLogin}
           variant="google-btn"
           label={<i className="fa-brands fa-google"></i>}
         />
+
         <Button
           onClick={handleGithubLogin}
           variant="github-btn"

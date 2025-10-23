@@ -18,6 +18,15 @@ export const sendOtpEmail = async (to, otp) => {
   });
 };
 
+// export const sendResetOtpEmail = async (to, otp) => {
+//   await transporter.sendMail({
+//     from: process.env.EMAIL_USER,
+//     to,
+//     subject: "Password Reset OTP",
+//     text: `Your password reset OTP is ${otp}. It expires in 10 minutes.`,
+//   });
+// };
+
 export const sendWelcomeEmail = async (to, name) => {
   await transporter.sendMail({
     from: process.env.EMAIL_USER,
