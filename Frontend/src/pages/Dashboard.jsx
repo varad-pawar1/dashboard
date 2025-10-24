@@ -1,34 +1,36 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import Button from "../components/Button";
 import { logout } from "../features/auth/authActions";
-import { fetchUser, sendResetLink } from "../features/auth/adminActions";
+import {
+  fetchDashboardData,
+  sendResetLink,
+} from "../features/auth/adminActions";
+import { Navbar } from "./Navbar";
+import { MainBodyDash } from "./MainBodyDash";
+import "../styles/dashboard.css";
 
 export default function Dashboard() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-
-  const { user, loading, successMessage, error } = useSelector(
+  const { user, admins, loading, error, successMessage } = useSelector(
     (state) => state.admin
   );
-  const [sendingLink, setSendingLink] = useState(false);
 
-  // Fetch logged-in user on mount
   useEffect(() => {
-    dispatch(fetchUser()).catch(() => navigate("/login"));
+    dispatch(fetchDashboardData()).catch(() => navigate("/login"));
   }, [dispatch, navigate]);
 
   const handleSendResetLink = async () => {
     if (!user?.email) return;
-    setSendingLink(true);
+    sendResetLink(true);
 
     try {
       await dispatch(sendResetLink(user.email));
     } catch (err) {
       console.error(err.message || err);
     } finally {
-      setSendingLink(false);
+      sendResetLink(false);
     }
   };
 
@@ -38,30 +40,19 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="auth-container">
-      {loading ? (
-        <p>Loading user data...</p>
-      ) : user ? (
-        <>
-          <h2>Welcome, {user.name} 🎉</h2>
-          <p>Email: {user.email}</p>
+    <div className="dashboard-container">
+      <Navbar
+        user={user}
+        onLogout={handleLogout}
+        onSendResetLink={handleSendResetLink}
+      />
 
-          <div style={{ marginTop: "20px", display: "flex", gap: "10px" }}>
-            <Button label="Logout" onClick={handleLogout} variant="Button" />
-            <Button
-              label={sendingLink ? "Sending..." : "Send Reset Link"}
-              onClick={handleSendResetLink}
-              variant="Button"
-              disabled={sendingLink}
-            />
-          </div>
-
-          {successMessage && <p className="success">{successMessage}</p>}
-          {error && <p className="error">{error}</p>}
-        </>
-      ) : (
-        <p>No user data available. Please login again.</p>
+      {error && <p className="message message-error">{error}</p>}
+      {successMessage && (
+        <p className="message message-success">{successMessage}</p>
       )}
+
+      <MainBodyDash admins={admins} loading={loading} />
     </div>
   );
 }

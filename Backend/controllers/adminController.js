@@ -6,9 +6,20 @@ dotenv.config();
 
 export const getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select("-password");
-    res.json({ user });
+    // Get the currently logged-in user (excluding password)
+    const adminLogin = await User.findById(req.user.id).select("-password");
+
+    // Get all users excluding the logged-in user
+    const allAdmins = await User.find({ _id: { $ne: req.user.id } }).select(
+      "-password"
+    );
+
+    res.json({
+      adminLogin,
+      allAdmins,
+    });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 };
