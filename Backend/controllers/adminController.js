@@ -24,9 +24,13 @@ export const sendResetLink = async (req, res) => {
     // Create JWT token with user id and expiration
     const resetToken = jwt.sign(
       { userId: user._id },
-      process.env.JWT_RESET_SECRET, // separate secret for reset
-      { expiresIn: "30m" } // token valid for 30 minutes
+      process.env.JWT_RESET_SECRET,
+      { expiresIn: "10m" }
     );
+
+    user.resetToken = resetToken;
+    user.resetTokenExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    await user.save();
 
     // Send email
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
@@ -45,22 +49,26 @@ export const resetPassword = async (req, res) => {
   const { password } = req.body;
 
   try {
-    // Verify token
     const decoded = jwt.verify(token, process.env.JWT_RESET_SECRET);
 
-    // Find user
     const user = await User.findById(decoded.userId);
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Update password (pre-save hook hashes automatically)
+    if (!user.resetToken || user.resetToken !== token)
+      return res.status(400).json({ message: "Invalid token" });
+
+    if (user.resetTokenExpiry < new Date())
+      return res.status(400).json({ message: "Token has expired" });
+
     user.password = password;
+    user.resetToken = undefined;
+    user.resetTokenExpiry = undefined;
     await user.save();
 
     res.status(200).json({ message: "Password reset successful" });
   } catch (err) {
-    console.error(err);
     if (err.name === "TokenExpiredError") {
       return res.status(400).json({ message: "Token has expired" });
     }
