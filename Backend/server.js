@@ -6,48 +6,39 @@ import authRoutes from "./routes/authRoutes.js";
 import routerAdmin from "./routes/adminRoutes.js";
 import cookieParser from "cookie-parser";
 import fs from "fs";
+
 import passport from "passport";
 import session from "express-session";
+import http from "http";
+import { Server } from "socket.io";
+import Chat from "./models/Chat.js"; // Chat model
 
-// Load environment variables
 dotenv.config();
-
-// Initialize Express
 const app = express();
-
-// Connect MongoDB
 connectDB();
 
 // ======= Middlewares =======
-
-// Allow frontend cookies + requests
 app.use(
   cors({
     origin: process.env.FRONTEND_URL,
     credentials: true,
   })
 );
-
-//  Parse JSON and cookies
 app.use(express.json());
 app.use(cookieParser());
-
-//  Express session (for passport OAuth)
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || process.env.JWT_SECRET, // better to keep SESSION_SECRET separate
+    secret: process.env.SESSION_SECRET || process.env.JWT_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: {
       secure: process.env.NODE_ENV === "production",
       httpOnly: true,
       sameSite: "lax",
-      maxAge: 24 * 60 * 60 * 1000, // 1 day
+      maxAge: 24 * 60 * 60 * 1000,
     },
   })
 );
-
-// Initialize Passport
 app.use(passport.initialize());
 app.use(passport.session());
 
@@ -68,8 +59,47 @@ app.get("/", (req, res) => res.json({ message: "Server is running ✅" }));
 app.use("/auth", authRoutes);
 app.use("/admin", routerAdmin);
 
-// ======= Start Server =======
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+// ======= HTTP + Socket.IO =======
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: process.env.FRONTEND_URL,
+    credentials: true,
+  },
 });
+
+io.on("connection", (socket) => {
+  console.log("New client connected:", socket.id);
+
+  socket.on("joinRoom", (roomId) => {
+    socket.join(roomId);
+    console.log(`Socket ${socket.id} joined room ${roomId}`);
+  });
+
+  socket.on("sendMessage", async (data, callback) => {
+    try {
+      const { sender, receiver, message } = data;
+      const newMessage = await Chat.create({ sender, receiver, message });
+
+      const roomId1 = `${sender}-${receiver}`;
+      const roomId2 = `${receiver}-${sender}`;
+
+      io.to(roomId1).emit("receiveMessage", newMessage);
+      io.to(roomId2).emit("receiveMessage", newMessage);
+
+      callback(newMessage); // return saved message to sender
+    } catch (err) {
+      console.error("Error saving chat:", err);
+    }
+  });
+
+  socket.on("disconnect", () => {
+    console.log("Client disconnected:", socket.id);
+  });
+});
+
+// ======= Start server =======
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () =>
+  console.log(`Server running at http://localhost:${PORT}`)
+);

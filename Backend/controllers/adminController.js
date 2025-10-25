@@ -1,6 +1,8 @@
 import User from "../models/User.js";
 import dotenv from "dotenv";
 import { sendResetLinkEmail } from "../utils/mailer.js";
+import Chat from "../models/Chat.js";
+
 import jwt from "jsonwebtoken";
 dotenv.config();
 
@@ -20,6 +22,22 @@ export const getMe = async (req, res) => {
     });
   } catch (err) {
     console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const chatUser = async (req, res) => {
+  const { userId, adminId } = req.params;
+  try {
+    const chats = await Chat.find({
+      $or: [
+        { sender: userId, receiver: adminId },
+        { sender: adminId, receiver: userId },
+      ],
+    }).sort({ timestamp: 1 });
+
+    res.json(chats);
+  } catch (err) {
     res.status(500).json({ message: "Server error" });
   }
 };

@@ -2,14 +2,19 @@ import express from "express";
 import { protect } from "../middleware/protect.js";
 import {
   getMe,
+  chatUser,
   resetPassword,
   sendResetLink,
 } from "../controllers/adminController.js";
 
-const routerAdmin = express.Router();
+const router = express.Router();
 
-routerAdmin.get("/me", protect, getMe);
-routerAdmin.post("/send-reset-link", protect, sendResetLink);
-routerAdmin.post("/reset-password/:token", resetPassword);
+// Admin routes
+router.get("/me", protect, getMe);
+router.post("/send-reset-link", protect, sendResetLink);
+router.post("/reset-password/:token", resetPassword);
 
-export default routerAdmin;
+// Chat history
+router.get("/chats/:userId/:adminId", protect, chatUser);
+
+export default router;

@@ -1,6 +1,10 @@
 import "../styles/dashboard.css";
+import React, { useState } from "react";
+import ChatPanel from "./ChatPanel";
 
-export function MainBodyDash({ admins, loading }) {
+export function MainBodyDash({ admins, loading, user }) {
+  const [chatAdmin, setChatAdmin] = useState(null);
+
   return (
     <div className="mainbody-container">
       <div className="admin-list-container">
@@ -18,7 +22,12 @@ export function MainBodyDash({ admins, loading }) {
                   <p className="admin-name">{admin.name}</p>
                   <p className="admin-email">{admin.email}</p>
                 </div>
-                <button className="chat-button">Chat</button>
+                <button
+                  className="chat-button"
+                  onClick={() => setChatAdmin(admin)}
+                >
+                  Chat
+                </button>
               </div>
             ))}
           </div>
@@ -26,6 +35,14 @@ export function MainBodyDash({ admins, loading }) {
           <p className="message message-error">No admins found</p>
         )}
       </div>
+
+      {chatAdmin && (
+        <ChatPanel
+          user={user}
+          admin={chatAdmin}
+          onClose={() => setChatAdmin(null)}
+        />
+      )}
     </div>
   );
 }
