@@ -1,44 +1,69 @@
 import User from "../models/User.js";
 import dotenv from "dotenv";
 import { sendResetLinkEmail } from "../utils/mailer.js";
-import Chat from "../models/Chat.js";
+import Conversation from "../models/Conversation.js";
 
 import jwt from "jsonwebtoken";
 dotenv.config();
 
+// Get logged-in admin and all other admins
 export const getMe = async (req, res) => {
   try {
-    // Get the currently logged-in user (excluding password)
     const adminLogin = await User.findById(req.user.id).select("-password");
-
-    // Get all users excluding the logged-in user
     const allAdmins = await User.find({ _id: { $ne: req.user.id } }).select(
       "-password"
     );
 
-    res.json({
-      adminLogin,
-      allAdmins,
-    });
+    res.json({ adminLogin, allAdmins });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 };
 
+// Fetch conversation messages between user and admin
 export const chatUser = async (req, res) => {
   const { userId, adminId } = req.params;
   try {
-    const chats = await Chat.find({
-      $or: [
-        { sender: userId, receiver: adminId },
-        { sender: adminId, receiver: userId },
-      ],
-    }).sort({ timestamp: 1 });
+    const conversation = await Conversation.findOne({
+      participants: { $all: [userId, adminId] },
+    }).populate("messages.sender", "name email");
 
-    res.json(chats);
+    if (!conversation) return res.json([]);
+    res.json(conversation.messages);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const saveMessage = async ({ sender, receiver, message }) => {
+  try {
+    // Sort IDs to ensure one conversation per pair
+    const participants = [sender, receiver].sort();
+
+    // Try to find existing conversation
+    let conversation = await Conversation.findOne({ participants });
+
+    if (!conversation) {
+      // If no conversation exists, create one
+      conversation = new Conversation({
+        participants,
+        messages: [{ sender, message }],
+      });
+    } else {
+      // Add new message to existing conversation
+      conversation.messages.push({ sender, message });
+    }
+
+    conversation.updatedAt = new Date(); // update timestamp
+    await conversation.save();
+
+    // Return the newly added message
+    return conversation.messages[conversation.messages.length - 1];
+  } catch (err) {
+    console.error("saveMessage Error:", err);
+    throw err;
   }
 };
 

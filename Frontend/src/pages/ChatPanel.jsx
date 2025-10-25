@@ -9,56 +9,54 @@ export default function ChatPanel({ user, admin, onClose }) {
   const [newMessage, setNewMessage] = useState("");
   const scrollRef = useRef();
 
-  // Initialize Socket.IO and fetch chat history
   useEffect(() => {
     socket = io(`${import.meta.env.VITE_BACKEND_URL}`);
 
-    const roomId = `${user._id}-${admin._id}`;
+    const roomId = [user._id, admin._id].sort().join("-");
     socket.emit("joinRoom", roomId);
 
-    // Fetch existing chat history
+    // Fetch existing conversation messages
     APIADMIN.get(`/chats/${user._id}/${admin._id}`)
-      .then((res) => setMessages(res.data))
+      .then((res) => {
+        // Normalize messages: convert sender to string
+        const normalized = res.data.map((msg) => ({
+          ...msg,
+          sender: msg.sender?._id ? msg.sender._id : msg.sender,
+        }));
+        setMessages(normalized);
+      })
       .catch(console.error);
 
     // Listen for incoming messages
     socket.on("receiveMessage", (msg) => {
-      if (
-        (msg.sender === user._id && msg.receiver === admin._id) ||
-        (msg.sender === admin._id && msg.receiver === user._id)
-      ) {
-        setMessages((prev) => {
-          // prevent duplicate message
-          if (prev.some((m) => m._id === msg._id)) return prev;
-          return [...prev, msg];
-        });
-      }
+      const normalizedMsg = {
+        ...msg,
+        sender: msg.sender?._id ? msg.sender._id : msg.sender,
+      };
+
+      setMessages((prev) => {
+        if (prev.some((m) => m._id === normalizedMsg._id)) return prev;
+        return [...prev, normalizedMsg];
+      });
     });
 
-    return () => {
-      socket.disconnect();
-    };
+    return () => socket.disconnect();
   }, [user, admin]);
 
-  // Scroll to last message
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Send message
   const handleSend = () => {
     if (!newMessage.trim()) return;
 
-    const msgData = {
+    socket.emit("sendMessage", {
       sender: user._id,
       receiver: admin._id,
       message: newMessage,
-    };
+    });
 
-    // Emit message to server
-    socket.emit("sendMessage", msgData);
-
-    setNewMessage(""); // clear input
+    setNewMessage("");
   };
 
   return (
@@ -67,22 +65,23 @@ export default function ChatPanel({ user, admin, onClose }) {
         <div className="chat-header">
           <span>{admin.name}</span>
           <button className="close-btn" onClick={onClose}>
-            <i class="fa-solid fa-circle-xmark"></i>
+            <i className="fa-solid fa-circle-xmark"></i>
           </button>
         </div>
 
         <div className="chat-messages">
-          {messages.map((msg, index) => (
-            <div
-              key={msg._id ? `${msg._id}-${index}` : index} // unique key
-              className={`chat-message ${
-                msg.sender === user._id ? "sent" : "received"
-              }`}
-              ref={index === messages.length - 1 ? scrollRef : null}
-            >
-              {msg.message}
-            </div>
-          ))}
+          {messages.map((msg, index) => {
+            const isSentByUser = String(msg.sender) === String(user._id);
+            return (
+              <div
+                key={msg._id || index}
+                className={`chat-message ${isSentByUser ? "sent" : "received"}`}
+                ref={index === messages.length - 1 ? scrollRef : null}
+              >
+                {msg.message}
+              </div>
+            );
+          })}
         </div>
 
         <div className="chat-input">
