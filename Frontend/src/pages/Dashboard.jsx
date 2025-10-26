@@ -13,9 +13,7 @@ import "../styles/dashboard.css";
 export default function Dashboard() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { user, admins, loading, error, successMessage } = useSelector(
-    (state) => state.admin
-  );
+  const { user, admins, loading, error } = useSelector((state) => state.admin);
   const [selectedAdmin, setSelectedAdmin] = useState(null);
 
   useEffect(() => {
@@ -24,7 +22,6 @@ export default function Dashboard() {
 
   const handleSendResetLink = async () => {
     if (!user?.email) return;
-
     try {
       await dispatch(sendResetLink(user.email));
     } catch (err) {
@@ -48,7 +45,6 @@ export default function Dashboard() {
         onLogout={handleLogout}
         onSendResetLink={handleSendResetLink}
       />
-
       {selectedAdmin ? (
         <ChatPanel
           user={user}

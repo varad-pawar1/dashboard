@@ -41,7 +41,6 @@ export function Sidebar({
           <p>No admins found</p>
         )}
       </div>
-
       <div className="sidebar-footer">
         {loading ? (
           <p>Loading admin...</p>
@@ -55,7 +54,7 @@ export function Sidebar({
                   <i
                     className="fa-solid fa-user"
                     style={{ color: "#74C0FC", fontSize: "24px" }}
-                  ></i>
+                  />
                 )}
               </div>
               <div>
@@ -65,11 +64,6 @@ export function Sidebar({
             </div>
             <div className="sidebarb">
               <Button label="Logout" onClick={onLogout} variant={"logout"} />
-              {/* <Button
-              label="Set Password"
-              onClick={onSendResetLink}
-              variant={"SP"}
-            /> */}
             </div>
           </div>
         ) : (
