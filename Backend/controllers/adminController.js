@@ -67,6 +67,65 @@ export const saveMessage = async ({ sender, receiver, message }) => {
   }
 };
 
+// Update a message inside a conversation
+export const updateMessage = async (req, res) => {
+  const { id } = req.params; // message ID
+  const { message } = req.body;
+
+  try {
+    // 1️⃣ Find conversation that contains this message
+    const conversation = await Conversation.findOne({ "messages._id": id });
+    if (!conversation)
+      return res.status(404).json({ message: "Message not found" });
+
+    // 2️⃣ Find the message in the conversation
+    const msgIndex = conversation.messages.findIndex(
+      (m) => m._id.toString() === id
+    );
+    if (msgIndex === -1)
+      return res.status(404).json({ message: "Message not found" });
+
+    // 3️⃣ Update message text & timestamp
+    conversation.messages[msgIndex].message = message;
+    conversation.messages[msgIndex].timestamp = new Date();
+
+    // 4️⃣ Save conversation
+    await conversation.save();
+
+    // 5️⃣ Return updated message
+    res.json(conversation.messages[msgIndex]);
+  } catch (err) {
+    console.error("UpdateMessage Error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Delete a message inside a conversation
+export const deleteMessage = async (req, res) => {
+  const { id } = req.params; // message ID
+
+  try {
+    // 1️⃣ Find conversation containing this message
+    const conversation = await Conversation.findOne({ "messages._id": id });
+    if (!conversation)
+      return res.status(404).json({ message: "Message not found" });
+
+    // 2️⃣ Filter out the message
+    conversation.messages = conversation.messages.filter(
+      (m) => m._id.toString() !== id
+    );
+
+    // 3️⃣ Save conversation
+    await conversation.save();
+
+    // 4️⃣ Return success
+    res.json({ message: "Message deleted", id });
+  } catch (err) {
+    console.error("DeleteMessage Error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 // Send reset link
 export const sendResetLink = async (req, res) => {
   const { email } = req.body;

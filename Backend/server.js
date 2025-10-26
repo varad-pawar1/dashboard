@@ -8,6 +8,7 @@ import cookieParser from "cookie-parser";
 import http from "http";
 import { Server } from "socket.io";
 import { saveMessage } from "./controllers/adminController.js";
+import Conversation from "./models/Conversation.js";
 
 dotenv.config();
 const app = express();
@@ -31,11 +32,13 @@ const io = new Server(server, {
 io.on("connection", (socket) => {
   console.log("New client connected:", socket.id);
 
+  // Join chat room
   socket.on("joinRoom", (roomId) => {
     socket.join(roomId);
     console.log(`Socket ${socket.id} joined room ${roomId}`);
   });
 
+  // Send message
   socket.on("sendMessage", async (data) => {
     try {
       const { sender, receiver, message } = data;
@@ -45,6 +48,56 @@ io.on("connection", (socket) => {
       io.to(roomId).emit("receiveMessage", savedMsg);
     } catch (err) {
       console.error("Error saving chat:", err);
+    }
+  });
+
+  // Update message
+  socket.on("updateMessage", async (data) => {
+    try {
+      const { _id, message, sender, receiver } = data;
+
+      // 1️⃣ Find conversation containing this message
+      const conversation = await Conversation.findOne({ "messages._id": _id });
+      if (!conversation) return;
+
+      // 2️⃣ Update message
+      const msgIndex = conversation.messages.findIndex(
+        (m) => m._id.toString() === _id
+      );
+      if (msgIndex === -1) return;
+
+      conversation.messages[msgIndex].message = message;
+      conversation.messages[msgIndex].timestamp = new Date();
+      await conversation.save();
+
+      // 3️⃣ Broadcast to the room
+      const roomId = [sender, receiver].sort().join("-");
+      io.to(roomId).emit("updateMessage", conversation.messages[msgIndex]);
+    } catch (err) {
+      console.error("Error updating message:", err);
+    }
+  });
+
+  // Delete message
+  socket.on("deleteMessage", async (data) => {
+    try {
+      const { _id, sender, receiver } = data;
+
+      // 1️⃣ Find conversation containing this message
+      const conversation = await Conversation.findOne({ "messages._id": _id });
+      if (!conversation) return;
+
+      // 2️⃣ Remove message
+      conversation.messages = conversation.messages.filter(
+        (m) => m._id.toString() !== _id
+      );
+      await conversation.save();
+
+      // 3️⃣ Broadcast deletion
+      const roomId = [sender, receiver].sort().join("-");
+      io.to(roomId).emit("deleteMessage", _id);
+    } catch (err) {
+      console.error("Error deleting message:", err);
     }
   });
 

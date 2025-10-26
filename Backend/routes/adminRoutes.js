@@ -5,6 +5,8 @@ import {
   chatUser,
   resetPassword,
   sendResetLink,
+  updateMessage,
+  deleteMessage,
 } from "../controllers/adminController.js";
 
 const router = express.Router();
@@ -16,5 +18,6 @@ router.post("/reset-password/:token", resetPassword);
 
 // Chat history
 router.get("/chats/:userId/:adminId", protect, chatUser);
-
+router.put("/chats/:id", protect, updateMessage);
+router.delete("/chats/:id", protect, deleteMessage);
 export default router;
