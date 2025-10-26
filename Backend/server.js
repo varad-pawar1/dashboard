@@ -14,7 +14,6 @@ dotenv.config();
 const app = express();
 connectDB();
 
-// Middlewares
 app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
@@ -23,31 +22,32 @@ app.use("/admin", routerAdmin);
 
 app.get("/", (req, res) => res.json({ message: "Server is running ✅" }));
 
-// HTTP + Socket.IO
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: process.env.FRONTEND_URL, credentials: true },
 });
 
+// Helper to get deterministic room ID
+const getRoomId = (user1, user2) => [user1, user2].sort().join("-");
+
 io.on("connection", (socket) => {
   console.log("New client connected:", socket.id);
 
-  // Join chat room
+  // Join room
   socket.on("joinRoom", (roomId) => {
     socket.join(roomId);
     console.log(`Socket ${socket.id} joined room ${roomId}`);
   });
 
-  // Send message
+  // Send new message
   socket.on("sendMessage", async (data) => {
     try {
       const { sender, receiver, message } = data;
       const savedMsg = await saveMessage({ sender, receiver, message });
-
-      const roomId = [sender, receiver].sort().join("-");
+      const roomId = getRoomId(sender, receiver);
       io.to(roomId).emit("receiveMessage", savedMsg);
     } catch (err) {
-      console.error("Error saving chat:", err);
+      console.error("Error sending message:", err);
     }
   });
 
@@ -55,24 +55,20 @@ io.on("connection", (socket) => {
   socket.on("updateMessage", async (data) => {
     try {
       const { _id, message, sender, receiver } = data;
-
-      // 1️⃣ Find conversation containing this message
       const conversation = await Conversation.findOne({ "messages._id": _id });
       if (!conversation) return;
 
-      // 2️⃣ Update message
-      const msgIndex = conversation.messages.findIndex(
+      const index = conversation.messages.findIndex(
         (m) => m._id.toString() === _id
       );
-      if (msgIndex === -1) return;
+      if (index === -1) return;
 
-      conversation.messages[msgIndex].message = message;
-      conversation.messages[msgIndex].timestamp = new Date();
+      conversation.messages[index].message = message;
+      conversation.messages[index].timestamp = new Date();
       await conversation.save();
 
-      // 3️⃣ Broadcast to the room
-      const roomId = [sender, receiver].sort().join("-");
-      io.to(roomId).emit("updateMessage", conversation.messages[msgIndex]);
+      const roomId = getRoomId(sender, receiver);
+      io.to(roomId).emit("updateMessage", conversation.messages[index]);
     } catch (err) {
       console.error("Error updating message:", err);
     }
@@ -82,20 +78,16 @@ io.on("connection", (socket) => {
   socket.on("deleteMessage", async (data) => {
     try {
       const { _id, sender, receiver } = data;
-
-      // 1️⃣ Find conversation containing this message
       const conversation = await Conversation.findOne({ "messages._id": _id });
       if (!conversation) return;
 
-      // 2️⃣ Remove message
       conversation.messages = conversation.messages.filter(
         (m) => m._id.toString() !== _id
       );
       await conversation.save();
 
-      // 3️⃣ Broadcast deletion
-      const roomId = [sender, receiver].sort().join("-");
-      io.to(roomId).emit("deleteMessage", _id);
+      const roomId = getRoomId(sender, receiver);
+      io.to(roomId).emit("deleteMessage", _id); // broadcast deletion
     } catch (err) {
       console.error("Error deleting message:", err);
     }
@@ -106,7 +98,6 @@ io.on("connection", (socket) => {
   });
 });
 
-// Start server
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () =>
   console.log(`Server running at http://localhost:${PORT}`)

@@ -6,18 +6,18 @@ let socket;
 
 export default function ChatPanel({ user, admin, onClose }) {
   const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState("");
+  const [inputValue, setInputValue] = useState("");
   const [editingMessageId, setEditingMessageId] = useState(null);
-  const [editingText, setEditingText] = useState("");
   const [menuVisibleId, setMenuVisibleId] = useState(null);
   const scrollRef = useRef();
 
+  const roomId = [user._id, admin._id].sort().join("-");
+
+  // Socket & Chat History
   useEffect(() => {
     socket = io(`${import.meta.env.VITE_BACKEND_URL}`);
-    const roomId = [user._id, admin._id].sort().join("-");
     socket.emit("joinRoom", roomId);
 
-    // Fetch chat history
     APIADMIN.get(`/chats/${user._id}/${admin._id}`)
       .then((res) => {
         const normalized = res.data.map((msg) => ({
@@ -28,50 +28,71 @@ export default function ChatPanel({ user, admin, onClose }) {
       })
       .catch(console.error);
 
-    // Receive new message
+    // Socket Listeners
+
     socket.on("receiveMessage", (msg) => {
       const normalizedMsg = { ...msg, sender: msg.sender?._id || msg.sender };
       setMessages((prev) =>
-        prev.some((m) => m._id === normalizedMsg._id)
+        prev.some((m) => String(m._id) === String(normalizedMsg._id))
           ? prev
           : [...prev, normalizedMsg]
       );
     });
 
-    // Update message
     socket.on("updateMessage", (updatedMsg) => {
       setMessages((prev) =>
-        prev.map((m) => (m._id === updatedMsg._id ? updatedMsg : m))
+        prev.map((m) =>
+          String(m._id) === String(updatedMsg._id) ? updatedMsg : m
+        )
       );
     });
 
-    // Delete message
     socket.on("deleteMessage", (msgId) => {
-      setMessages((prev) => prev.filter((m) => m._id !== msgId));
+      setMessages((prev) =>
+        prev.filter((m) => String(m._id) !== String(msgId))
+      );
     });
 
     return () => socket.disconnect();
-  }, [user, admin]);
+  }, [user._id, admin._id]);
 
+  // Scroll to latest
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Send message
-  const handleSend = () => {
-    if (!newMessage.trim()) return;
+  // Send or Update
+  const handleSend = async () => {
+    if (!inputValue.trim()) return;
 
-    const msgObj = {
-      sender: user._id,
-      receiver: admin._id,
-      message: newMessage,
-    };
-
-    socket.emit("sendMessage", msgObj); // server will broadcast
-    setNewMessage(""); // clear input
+    if (editingMessageId) {
+      try {
+        const res = await APIADMIN.put(`/chats/${editingMessageId}`, {
+          message: inputValue,
+        });
+        const updatedMsg = res.data;
+        socket.emit("updateMessage", {
+          ...updatedMsg,
+          sender: user._id,
+          receiver: admin._id,
+        });
+        setEditingMessageId(null);
+        setInputValue("");
+      } catch (err) {
+        console.error(err);
+      }
+    } else {
+      const msgObj = {
+        sender: user._id,
+        receiver: admin._id,
+        message: inputValue,
+      };
+      socket.emit("sendMessage", msgObj);
+      setInputValue("");
+    }
   };
 
-  // Delete message
+  // Delete
   const handleDelete = async (msgId) => {
     try {
       await APIADMIN.delete(`/chats/${msgId}`);
@@ -80,43 +101,37 @@ export default function ChatPanel({ user, admin, onClose }) {
         sender: user._id,
         receiver: admin._id,
       });
+      setMessages((prev) =>
+        prev.filter((m) => String(m._id) !== String(msgId))
+      );
+      setMenuVisibleId(null);
     } catch (err) {
       console.error(err);
     }
   };
 
-  // Start editing
+  // Edit
   const handleEdit = (msg) => {
     setEditingMessageId(msg._id);
-    setEditingText(msg.message);
+    setInputValue(msg.message);
     setMenuVisibleId(null);
   };
-
-  // Update message
-  const handleUpdate = async () => {
-    try {
-      const res = await APIADMIN.put(`/chats/${editingMessageId}`, {
-        message: editingText,
-      });
-      const updatedMsg = res.data;
-
-      socket.emit("updateMessage", {
-        _id: updatedMsg._id,
-        message: updatedMsg.message,
-        sender: user._id,
-        receiver: admin._id,
-      });
-
-      setEditingMessageId(null);
-      setEditingText("");
-    } catch (err) {
-      console.error(err);
-    }
+  const cancelEdit = () => {
+    setEditingMessageId(null);
+    setInputValue("");
   };
+
+  // Close menu on outside click
+  useEffect(() => {
+    const handleClickOutside = () => setMenuVisibleId(null);
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, []);
 
   return (
     <div className="chat-panel-backdrop">
-      <div className="chat-panel">
+      <div className="chat-panel" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
         <div className="chat-header">
           <span>{admin.name}</span>
           <button className="close-btn" onClick={onClose}>
@@ -124,11 +139,10 @@ export default function ChatPanel({ user, admin, onClose }) {
           </button>
         </div>
 
+        {/* Messages */}
         <div className="chat-messages">
           {messages.map((msg, index) => {
             const isSentByUser = String(msg.sender) === String(user._id);
-            const isEditing = editingMessageId === msg._id;
-
             return (
               <div
                 key={msg._id || index}
@@ -136,44 +150,39 @@ export default function ChatPanel({ user, admin, onClose }) {
                 ref={index === messages.length - 1 ? scrollRef : null}
                 onClick={() => isSentByUser && setMenuVisibleId(msg._id)}
               >
-                {isEditing ? (
-                  <div className="edit-container">
-                    <input
-                      value={editingText}
-                      onChange={(e) => setEditingText(e.target.value)}
-                    />
-                    <button onClick={handleUpdate}>Update</button>
-                    <button onClick={() => setEditingMessageId(null)}>
-                      Cancel
+                <span>{msg.message}</span>
+                {isSentByUser && menuVisibleId === msg._id && (
+                  <div className="message-menu">
+                    <button onClick={() => handleDelete(msg._id)}>
+                      Delete
                     </button>
+                    <button onClick={() => handleEdit(msg)}>Edit</button>
                   </div>
-                ) : (
-                  <>
-                    <span>{msg.message}</span>
-                    {isSentByUser && menuVisibleId === msg._id && (
-                      <div className="message-menu">
-                        <button onClick={() => handleEdit(msg)}>Edit</button>
-                        <button onClick={() => handleDelete(msg._id)}>
-                          Delete
-                        </button>
-                      </div>
-                    )}
-                  </>
                 )}
               </div>
             );
           })}
         </div>
 
+        {/* Input */}
         <div className="chat-input">
           <input
             type="text"
-            placeholder="Type a message..."
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
+            placeholder={
+              editingMessageId ? "Edit your message..." : "Type a message..."
+            }
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
           />
-          <button onClick={handleSend}>Send</button>
+          {editingMessageId ? (
+            <>
+              <button onClick={handleSend}>Update</button>
+              <button onClick={cancelEdit}>Cancel</button>
+            </>
+          ) : (
+            <button onClick={handleSend}>Send</button>
+          )}
         </div>
       </div>
     </div>
