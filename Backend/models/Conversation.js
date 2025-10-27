@@ -9,6 +9,7 @@ const messageSchema = new mongoose.Schema(
     },
     message: { type: String, required: true },
     timestamp: { type: Date, default: Date.now },
+    readBy: { type: Boolean, default: false },
   },
   { _id: true }
 ); // each message gets its own _id automatically

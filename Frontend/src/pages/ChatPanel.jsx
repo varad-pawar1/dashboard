@@ -144,15 +144,22 @@ export default function ChatPanel({ user, admin, onClose }) {
   // Delete
   const handleDelete = async (msgId) => {
     try {
+      // 1) delete on server via REST
       await APIADMIN.delete(`/chats/${msgId}`);
-      socket.emit("deleteMessage", {
+
+      // 2) notify other clients via socket so server will broadcast to the room
+      // Use a simple 'notifyDelete' event (server will broadcast to room without re-deleting)
+      socket.emit("notifyDelete", {
         _id: msgId,
         sender: user._id,
         receiver: admin._id,
       });
+
+      // 3) update local UI immediately (optimistic)
       setMessages((prev) =>
         prev.filter((m) => String(m._id) !== String(msgId))
       );
+
       // ensure we clear UI state
       if (editingMessageId && String(editingMessageId) === String(msgId)) {
         setEditingMessageId(null);

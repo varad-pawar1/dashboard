@@ -126,6 +126,34 @@ export const deleteMessage = async (req, res) => {
   }
 };
 
+// Mark all unread messages as read for a conversation
+export const markMessagesAsRead = async (req, res) => {
+  const { userId, otherUserId } = req.params;
+
+  try {
+    const conversation = await Conversation.findOne({
+      participants: { $all: [userId, otherUserId] },
+    });
+
+    if (!conversation)
+      return res.status(404).json({ message: "No conversation" });
+
+    // Mark all messages sent by the other user as read
+    conversation.messages.forEach((msg) => {
+      if (msg.sender.toString() !== userId && !msg.readBy) {
+        msg.readBy = true;
+      }
+    });
+
+    await conversation.save();
+
+    res.json({ message: "Messages marked as read" });
+  } catch (err) {
+    console.error("markMessagesAsRead Error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 // Send reset link
 export const sendResetLink = async (req, res) => {
   const { email } = req.body;

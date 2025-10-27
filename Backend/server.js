@@ -74,7 +74,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Delete message
+  // Delete message (existing handler) -- keep if you still want to support socket-initiated deletes
   socket.on("deleteMessage", async (data) => {
     try {
       const { _id, sender, receiver } = data;
@@ -90,6 +90,42 @@ io.on("connection", (socket) => {
       io.to(roomId).emit("deleteMessage", _id); // broadcast deletion
     } catch (err) {
       console.error("Error deleting message:", err);
+    }
+  });
+
+  // NEW: notifyDelete — when frontend already removed message (via REST), just broadcast to room
+  socket.on("notifyDelete", (data) => {
+    try {
+      const { _id, sender, receiver } = data;
+      const roomId = getRoomId(sender, receiver);
+      // Broadcast the deleted message id to all sockets in the room
+      io.to(roomId).emit("deleteMessage", _id);
+    } catch (err) {
+      console.error("notifyDelete error:", err);
+    }
+  });
+
+  socket.on("markAsRead", async ({ userId, otherUserId }) => {
+    try {
+      const conversation = await Conversation.findOne({
+        participants: { $all: [userId, otherUserId] },
+      });
+      if (!conversation) return;
+
+      let updated = false;
+      conversation.messages.forEach((msg) => {
+        if (msg.sender.toString() !== userId && !msg.readBy) {
+          msg.readBy = true;
+          updated = true;
+        }
+      });
+
+      if (updated) await conversation.save();
+
+      const roomId = [userId, otherUserId].sort().join("-");
+      io.to(roomId).emit("messagesRead", { readerId: userId });
+    } catch (err) {
+      console.error("markAsRead socket error:", err);
     }
   });
 
