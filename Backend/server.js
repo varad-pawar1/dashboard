@@ -20,7 +20,7 @@ app.use(cookieParser());
 app.use("/auth", authRoutes);
 app.use("/admin", routerAdmin);
 
-app.get("/", (req, res) => res.json({ message: "Server is running ✅" }));
+app.get("/", (req, res) => res.json({ message: "Server is running " }));
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -31,27 +31,71 @@ const io = new Server(server, {
 const getRoomId = (user1, user2) => [user1, user2].sort().join("-");
 
 io.on("connection", (socket) => {
-  console.log("New client connected:", socket.id);
+  console.log(" Client connected:", socket.id);
 
-  // Join room
+  socket.on("joinUser", async (userId) => {
+    socket.userId = userId;
+    socket.join(userId);
+
+    try {
+      const conversations = await Conversation.find({ participants: userId });
+
+      const unreadCounts = {};
+      const lastMessages = {};
+
+      conversations.forEach((conv) => {
+        const otherUser = conv.participants.find(
+          (p) => p.toString() !== userId
+        );
+
+        //Count unread messages
+        const unreadMsgs = conv.messages.filter(
+          (m) => m.sender.toString() !== userId && !m.readBy
+        );
+        unreadCounts[otherUser] = unreadMsgs.length;
+
+        //Get last message (if any)
+        if (conv.messages.length > 0) {
+          const lastMsg = conv.messages[conv.messages.length - 1];
+          lastMessages[otherUser] = {
+            text: lastMsg.message,
+            sender: lastMsg.sender,
+            timestamp: lastMsg.timestamp,
+          };
+        }
+      });
+
+      //  Send both unread counts and last messages to user
+      socket.emit("initChatData", { unreadCounts, lastMessages });
+    } catch (err) {
+      console.error("Error fetching initial chat data:", err);
+    }
+  });
+
+  //Join chat room (existing)
   socket.on("joinRoom", (roomId) => {
     socket.join(roomId);
     console.log(`Socket ${socket.id} joined room ${roomId}`);
   });
 
-  // Send new message
+  //Send message (keep your existing logic)
   socket.on("sendMessage", async (data) => {
     try {
       const { sender, receiver, message } = data;
       const savedMsg = await saveMessage({ sender, receiver, message });
       const roomId = getRoomId(sender, receiver);
+
+      // Send message to both users in the room
       io.to(roomId).emit("receiveMessage", savedMsg);
+
+      //Increment unread for receiver
+      io.to(receiver).emit("incrementUnread", { sender });
     } catch (err) {
       console.error("Error sending message:", err);
     }
   });
 
-  // Update message
+  //Update message (unchanged)
   socket.on("updateMessage", async (data) => {
     try {
       const { _id, message, sender, receiver } = data;
@@ -74,7 +118,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Delete message (existing handler) -- keep if you still want to support socket-initiated deletes
+  //Delete message (unchanged)
   socket.on("deleteMessage", async (data) => {
     try {
       const { _id, sender, receiver } = data;
@@ -87,24 +131,24 @@ io.on("connection", (socket) => {
       await conversation.save();
 
       const roomId = getRoomId(sender, receiver);
-      io.to(roomId).emit("deleteMessage", _id); // broadcast deletion
+      io.to(roomId).emit("deleteMessage", _id);
     } catch (err) {
       console.error("Error deleting message:", err);
     }
   });
 
-  // NEW: notifyDelete — when frontend already removed message (via REST), just broadcast to room
+  //Notify delete (unchanged)
   socket.on("notifyDelete", (data) => {
     try {
       const { _id, sender, receiver } = data;
       const roomId = getRoomId(sender, receiver);
-      // Broadcast the deleted message id to all sockets in the room
       io.to(roomId).emit("deleteMessage", _id);
     } catch (err) {
       console.error("notifyDelete error:", err);
     }
   });
 
+  //Mark messages as read (adds unread reset)
   socket.on("markAsRead", async ({ userId, otherUserId }) => {
     try {
       const conversation = await Conversation.findOne({
@@ -124,6 +168,9 @@ io.on("connection", (socket) => {
 
       const roomId = [userId, otherUserId].sort().join("-");
       io.to(roomId).emit("messagesRead", { readerId: userId });
+
+      //Also reset unread count in receiver's sidebar
+      io.to(userId).emit("resetUnread", { sender: otherUserId });
     } catch (err) {
       console.error("markAsRead socket error:", err);
     }

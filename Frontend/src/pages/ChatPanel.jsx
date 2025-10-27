@@ -14,11 +14,11 @@ export default function ChatPanel({ user, admin, onClose }) {
 
   const roomId = [user._id, admin._id].sort().join("-");
 
-  // Socket & Chat History
   useEffect(() => {
     socket = io(`${import.meta.env.VITE_BACKEND_URL}`);
     socket.emit("joinRoom", roomId);
 
+    // Fetch chat history
     APIADMIN.get(`/chats/${user._id}/${admin._id}`)
       .then((res) => {
         const normalized = res.data.map((msg) => ({
@@ -26,13 +26,19 @@ export default function ChatPanel({ user, admin, onClose }) {
           sender: msg.sender?._id || msg.sender,
         }));
         setMessages(normalized);
+
+        // Once loaded, mark all as read
+        socket.emit("markAsRead", {
+          userId: user._id,
+          otherUserId: admin._id,
+        });
       })
       .catch(console.error);
-    // Focus the input when the component mounts
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
-    // Socket Listeners
+
+    // Focus input on mount
+    inputRef.current?.focus();
+
+    // Socket listeners
     socket.on("receiveMessage", (msg) => {
       const normalizedMsg = { ...msg, sender: msg.sender?._id || msg.sender };
       setMessages((prev) =>
@@ -40,6 +46,14 @@ export default function ChatPanel({ user, admin, onClose }) {
           ? prev
           : [...prev, normalizedMsg]
       );
+
+      // Auto mark as read if chat is open
+      if (normalizedMsg.sender !== user._id) {
+        socket.emit("markAsRead", {
+          userId: user._id,
+          otherUserId: admin._id,
+        });
+      }
     });
 
     socket.on("updateMessage", (updatedMsg) => {
@@ -52,16 +66,11 @@ export default function ChatPanel({ user, admin, onClose }) {
           String(m._id) === String(normalized._id) ? normalized : m
         )
       );
-      // If the message we were editing was updated by someone else, clear edit state
-      if (
-        editingMessageId &&
-        String(editingMessageId) === String(normalized._id)
-      ) {
+
+      if (editingMessageId === normalized._id) {
         setEditingMessageId(null);
         setInputValue("");
       }
-
-      // always hide any open menu for the updated message
       setMenuVisibleId(null);
     });
 
@@ -69,8 +78,7 @@ export default function ChatPanel({ user, admin, onClose }) {
       setMessages((prev) =>
         prev.filter((m) => String(m._id) !== String(msgId))
       );
-      // If the deleted message was being edited, clear edit state
-      if (editingMessageId && String(editingMessageId) === String(msgId)) {
+      if (editingMessageId === msgId) {
         setEditingMessageId(null);
         setInputValue("");
       }
@@ -84,17 +92,18 @@ export default function ChatPanel({ user, admin, onClose }) {
       socket.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user._id, admin._id]); // keep dependency minimal
+  }, [user._id, admin._id]);
 
-  // Scroll to latest
+  //Auto-scroll
+
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Utility flag: are we currently editing any message?
   const isEditing = Boolean(editingMessageId);
 
-  // Send or Update
+  //Send or Update Message
+
   const handleSend = async () => {
     if (!inputValue.trim()) return;
 
@@ -104,14 +113,11 @@ export default function ChatPanel({ user, admin, onClose }) {
           message: inputValue,
         });
         const updatedMsg = res.data;
-        // notify server/other clients
         socket.emit("updateMessage", {
           ...updatedMsg,
           sender: user._id,
           receiver: admin._id,
         });
-
-        // update local state optimistically (server will also emit updateMessage)
         setMessages((prev) =>
           prev.map((m) =>
             String(m._id) === String(updatedMsg._id)
@@ -122,8 +128,6 @@ export default function ChatPanel({ user, admin, onClose }) {
               : m
           )
         );
-
-        // Clear editing state and any open menu
         setEditingMessageId(null);
         setInputValue("");
         setMenuVisibleId(null);
@@ -141,27 +145,20 @@ export default function ChatPanel({ user, admin, onClose }) {
     }
   };
 
-  // Delete
+  //Delete Message
+
   const handleDelete = async (msgId) => {
     try {
-      // 1) delete on server via REST
       await APIADMIN.delete(`/chats/${msgId}`);
-
-      // 2) notify other clients via socket so server will broadcast to the room
-      // Use a simple 'notifyDelete' event (server will broadcast to room without re-deleting)
       socket.emit("notifyDelete", {
         _id: msgId,
         sender: user._id,
         receiver: admin._id,
       });
-
-      // 3) update local UI immediately (optimistic)
       setMessages((prev) =>
         prev.filter((m) => String(m._id) !== String(msgId))
       );
-
-      // ensure we clear UI state
-      if (editingMessageId && String(editingMessageId) === String(msgId)) {
+      if (editingMessageId === msgId) {
         setEditingMessageId(null);
         setInputValue("");
       }
@@ -171,47 +168,41 @@ export default function ChatPanel({ user, admin, onClose }) {
     }
   };
 
-  // Edit
+  //Edit Message
+
   const handleEdit = (msg) => {
     setMenuVisibleId(null);
     setEditingMessageId(msg._id);
     setInputValue(msg.message);
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
+    inputRef.current?.focus();
   };
+
   const cancelEdit = () => {
     setEditingMessageId(null);
     setInputValue("");
     setMenuVisibleId(null);
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
+    inputRef.current?.focus();
   };
 
-  // Close menu on outside click (but don't close editor)
+  //Menu Handling
+
   useEffect(() => {
-    const handleClickOutside = () => {
-      // Only clear menu, don't cancel an active edit
-      setMenuVisibleId(null);
-    };
+    const handleClickOutside = () => setMenuVisibleId(null);
     document.addEventListener("click", handleClickOutside);
     return () => document.removeEventListener("click", handleClickOutside);
   }, []);
 
-  // Click handler on message: open menu only if it's the user's message and we're NOT editing
   const handleMessageClick = (e, msg) => {
     e.stopPropagation();
-    const isSentByUser = String(msg.sender) === String(user._id);
-    if (!isSentByUser) return;
-    if (isEditing) return; // do not open any menu while editing
+    if (String(msg.sender) !== String(user._id) || isEditing) return;
     setMenuVisibleId((prev) => (prev === msg._id ? null : msg._id));
   };
+
+  //Render
 
   return (
     <div className="chat-panel-backdrop">
       <div className="chat-panel" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
         <div className="chat-header">
           <span>{admin.name}</span>
           <button className="close-btn" onClick={onClose}>
@@ -219,11 +210,10 @@ export default function ChatPanel({ user, admin, onClose }) {
           </button>
         </div>
 
-        {/* Messages */}
         <div className="chat-messages">
           {messages.map((msg, index) => {
             const isSentByUser = String(msg.sender) === String(user._id);
-            const isThisEditing =
+            const isEditingThis =
               editingMessageId && String(editingMessageId) === String(msg._id);
 
             return (
@@ -231,7 +221,7 @@ export default function ChatPanel({ user, admin, onClose }) {
                 key={msg._id || index}
                 className={`chat-message ${
                   isSentByUser ? "sent" : "received"
-                } ${isThisEditing ? "editing" : ""}`}
+                } ${isEditingThis ? "editing" : ""}`}
                 ref={index === messages.length - 1 ? scrollRef : null}
                 onClick={(e) => handleMessageClick(e, msg)}
               >
@@ -253,7 +243,6 @@ export default function ChatPanel({ user, admin, onClose }) {
           })}
         </div>
 
-        {/* Input */}
         <div className="chat-input">
           <input
             ref={inputRef}

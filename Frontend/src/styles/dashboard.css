@@ -211,8 +211,15 @@
   padding: 10px 16px;
   cursor: pointer;
   transition: 0.2s;
+  position: relative;
 }
-
+.unread-badge {
+  background: #6bdb6b;
+  padding: 3px;
+  border-radius: 10px;
+  position: absolute;
+  right: 0;
+}
 .chat-user-item.active,
 .chat-user-item:hover {
   background-color: #e0f2fe;
