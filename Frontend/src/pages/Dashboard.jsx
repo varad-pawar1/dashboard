@@ -56,16 +56,11 @@ export default function Dashboard() {
       setUnreadCounts((prev) => ({ ...prev, [sender]: 0 }));
     });
 
-    // 🔹 Update last message whenever one is received
-    socket.on("receiveMessage", (msg) => {
-      const otherUserId = msg.sender === user._id ? msg.receiver : msg.sender;
+    // 🔹 Update last message instantly when server notifies
+    socket.on("updateLastMessage", ({ otherUserId, lastMessage }) => {
       setLastMessages((prev) => ({
         ...prev,
-        [otherUserId]: {
-          text: msg.message,
-          sender: msg.sender,
-          timestamp: msg.timestamp,
-        },
+        [otherUserId]: lastMessage || null,
       }));
     });
 

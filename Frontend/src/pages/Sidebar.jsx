@@ -24,7 +24,7 @@ export function Sidebar({
         ) : admins.length > 0 ? (
           admins.map((admin) => {
             const lastMsg = lastMessages[admin._id];
-            let lastText = lastMsg ? lastMsg.text : "No messages yet";
+            let lastText = lastMsg ? lastMsg.text : "";
 
             if (lastText.length > 20) {
               lastText = lastText.substring(0, 20) + "...";
@@ -51,8 +51,8 @@ export function Sidebar({
                 {/* 🔵 Unread badge */}
                 {unreadCounts[admin._id] > 0 && (
                   <div className="unread-badge">
-                    {unreadCounts[admin._id] > 9
-                      ? "9+"
+                    {unreadCounts[admin._id] > 99
+                      ? "99+"
                       : unreadCounts[admin._id]}
                   </div>
                 )}

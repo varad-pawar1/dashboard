@@ -83,13 +83,38 @@ io.on("connection", (socket) => {
     try {
       const { sender, receiver, message } = data;
       const savedMsg = await saveMessage({ sender, receiver, message });
+
       const roomId = getRoomId(sender, receiver);
 
-      // Send message to both users in the room
+      // Make sure both sender & receiver are in the same room
+      socket.join(roomId);
+
+      // Send message to BOTH users in that room
       io.to(roomId).emit("receiveMessage", savedMsg);
 
-      //Increment unread for receiver
-      io.to(receiver).emit("incrementUnread", { sender });
+      // Increase unread count for receiver only
+      if (sender !== receiver) {
+        io.to(receiver).emit("incrementUnread", { sender });
+      }
+
+      // Update sidebar of both users with the new last message
+      io.to(sender).emit("updateLastMessage", {
+        otherUserId: receiver,
+        lastMessage: {
+          text: message,
+          sender,
+          timestamp: new Date(),
+        },
+      });
+
+      io.to(receiver).emit("updateLastMessage", {
+        otherUserId: sender,
+        lastMessage: {
+          text: message,
+          sender,
+          timestamp: new Date(),
+        },
+      });
     } catch (err) {
       console.error("Error sending message:", err);
     }
@@ -113,36 +138,71 @@ io.on("connection", (socket) => {
 
       const roomId = getRoomId(sender, receiver);
       io.to(roomId).emit("updateMessage", conversation.messages[index]);
+
+      io.to(sender).emit("updateLastMessage", {
+        otherUserId: receiver,
+        lastMessage: {
+          text: message,
+          sender,
+          timestamp: new Date(),
+        },
+      });
+
+      io.to(receiver).emit("updateLastMessage", {
+        otherUserId: sender,
+        lastMessage: {
+          text: message,
+          sender,
+          timestamp: new Date(),
+        },
+      });
     } catch (err) {
       console.error("Error updating message:", err);
     }
   });
 
-  //Delete message (unchanged)
-  socket.on("deleteMessage", async (data) => {
-    try {
-      const { _id, sender, receiver } = data;
-      const conversation = await Conversation.findOne({ "messages._id": _id });
-      if (!conversation) return;
-
-      conversation.messages = conversation.messages.filter(
-        (m) => m._id.toString() !== _id
-      );
-      await conversation.save();
-
-      const roomId = getRoomId(sender, receiver);
-      io.to(roomId).emit("deleteMessage", _id);
-    } catch (err) {
-      console.error("Error deleting message:", err);
-    }
-  });
-
-  //Notify delete (unchanged)
-  socket.on("notifyDelete", (data) => {
+  // Enhanced Notify Delete (keeps your delete flow intact)
+  socket.on("notifyDelete", async (data) => {
     try {
       const { _id, sender, receiver } = data;
       const roomId = getRoomId(sender, receiver);
+
+      // Emit deleteMessage event to chat room (so message disappears in chat)
       io.to(roomId).emit("deleteMessage", _id);
+
+      // Find updated conversation (to fetch last message)
+      const conversation = await Conversation.findOne({
+        participants: { $all: [sender, receiver] },
+      });
+
+      // Find last message if available
+      const lastMsg =
+        conversation?.messages?.length > 0
+          ? conversation.messages[conversation.messages.length - 1]
+          : null;
+
+      // Update both sender & receiver sidebar last messages
+      io.to(sender).emit("updateLastMessage", {
+        otherUserId: receiver,
+        lastMessage: lastMsg
+          ? {
+              text: lastMsg.message,
+              sender: lastMsg.sender,
+              timestamp: lastMsg.timestamp,
+            }
+          : null,
+      });
+
+      io.to(receiver).emit("updateLastMessage", {
+        otherUserId: sender,
+        lastMessage: lastMsg
+          ? {
+              text: lastMsg.message,
+              sender: lastMsg.sender,
+              timestamp: lastMsg.timestamp,
+            }
+          : null,
+      });
     } catch (err) {
       console.error("notifyDelete error:", err);
     }
