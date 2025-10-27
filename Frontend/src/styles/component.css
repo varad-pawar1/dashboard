@@ -8,7 +8,6 @@
   transition: all 0.3s ease;
 }
 
-/* Default Primary */
 .btn.primary {
   background-color: #007bff;
   color: white;
@@ -18,7 +17,6 @@
   background-color: #0069d9;
 }
 
-/* Secondary Style */
 .btn.secondary {
   background-color: #6c757d;
   color: white;
@@ -28,7 +26,6 @@
   background-color: #5a6268;
 }
 
-/* Outline Style */
 .btn.outline {
   background-color: transparent;
   border: 2px solid #007bff;
@@ -40,8 +37,54 @@
   color: white;
 }
 
-/* Disabled */
 .btn:disabled {
   background-color: #ccc;
   cursor: not-allowed;
+}
+
+.input-container {
+  position: relative;
+  margin-bottom: 10px;
+  width: 100%;
+}
+
+.input-field {
+  width: 100%;
+  padding: 8px 40px 8px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  outline: none;
+  font-size: 14px;
+  box-sizing: border-box;
+  transition: border-color 0.2s ease;
+}
+
+.input-field.error-border {
+  border-color: red;
+}
+
+.input-field.success-border {
+  border-color: green;
+}
+
+.toggle-password {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  cursor: pointer;
+  color: #777;
+  font-size: 16px;
+  user-select: none;
+  transition: color 0.2s ease;
+  line-height: 0;
+}
+
+.toggle-password:hover {
+  color: #000;
+}
+
+.error-text {
+  color: red;
+  font-size: 13px;
+  margin-top: 5px;
 }
