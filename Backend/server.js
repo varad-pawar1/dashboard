@@ -31,7 +31,7 @@ const io = new Server(server, {
 const getRoomId = (user1, user2) => [user1, user2].sort().join("-");
 
 io.on("connection", (socket) => {
-  console.log(" Client connected:", socket.id);
+  // console.log(" Client connected:", socket.id);
 
   socket.on("joinUser", async (userId) => {
     socket.userId = userId;
@@ -75,7 +75,7 @@ io.on("connection", (socket) => {
   //Join chat room (existing)
   socket.on("joinRoom", (roomId) => {
     socket.join(roomId);
-    console.log(`Socket ${socket.id} joined room ${roomId}`);
+    // console.log(`Socket ${socket.id} joined room ${roomId}`);
   });
 
   //Send message (keep your existing logic)
@@ -167,41 +167,70 @@ io.on("connection", (socket) => {
       const { _id, sender, receiver } = data;
       const roomId = getRoomId(sender, receiver);
 
-      // Emit deleteMessage event to chat room (so message disappears in chat)
+      // Emit delete event to chat room
       io.to(roomId).emit("deleteMessage", _id);
 
-      // Find updated conversation (to fetch last message)
+      // Find the conversation
       const conversation = await Conversation.findOne({
         participants: { $all: [sender, receiver] },
       });
 
-      // Find last message if available
+      if (!conversation) return;
+
+      // Find deleted message (to know if it was unread)
+      const deletedMsg = conversation.messages.find(
+        (m) => m._id.toString() === _id
+      );
+
+      // Remove the message
+      conversation.messages = conversation.messages.filter(
+        (m) => m._id.toString() !== _id
+      );
+      await conversation.save();
+
+      // 🔁 Recalculate unread counts for both participants
+      const unreadCounts = {};
+      for (const participant of conversation.participants) {
+        const unreadMsgs = conversation.messages.filter(
+          (m) => m.sender.toString() !== participant.toString() && !m.readBy
+        );
+        unreadCounts[participant.toString()] = unreadMsgs.length;
+      }
+
+      // 📨 Send updated unread count to each participant
+      for (const participant of conversation.participants) {
+        const otherUser = conversation.participants.find(
+          (p) => p.toString() !== participant.toString()
+        );
+
+        io.to(participant.toString()).emit("updateUnreadCount", {
+          otherUserId: otherUser.toString(),
+          count: unreadCounts[participant.toString()],
+        });
+      }
+
+      // 📩 Update last message for both users
       const lastMsg =
-        conversation?.messages?.length > 0
+        conversation.messages.length > 0
           ? conversation.messages[conversation.messages.length - 1]
           : null;
 
-      // Update both sender & receiver sidebar last messages
+      const lastMessageData = lastMsg
+        ? {
+            text: lastMsg.message,
+            sender: lastMsg.sender,
+            timestamp: lastMsg.timestamp,
+          }
+        : null;
+
       io.to(sender).emit("updateLastMessage", {
         otherUserId: receiver,
-        lastMessage: lastMsg
-          ? {
-              text: lastMsg.message,
-              sender: lastMsg.sender,
-              timestamp: lastMsg.timestamp,
-            }
-          : null,
+        lastMessage: lastMessageData,
       });
 
       io.to(receiver).emit("updateLastMessage", {
         otherUserId: sender,
-        lastMessage: lastMsg
-          ? {
-              text: lastMsg.message,
-              sender: lastMsg.sender,
-              timestamp: lastMsg.timestamp,
-            }
-          : null,
+        lastMessage: lastMessageData,
       });
     } catch (err) {
       console.error("notifyDelete error:", err);
@@ -237,7 +266,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    console.log("Client disconnected:", socket.id);
+    // console.log("Client disconnected:", socket.id);
   });
 });
 

@@ -15,6 +15,7 @@ export default function ChatPanel({ user, admin, onClose }) {
   const roomId = [user._id, admin._id].sort().join("-");
 
   useEffect(() => {
+    setInputValue("");
     socket = io(`${import.meta.env.VITE_BACKEND_URL}`);
     socket.emit("joinRoom", roomId);
 

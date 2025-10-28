@@ -48,7 +48,7 @@ export function Sidebar({
                   <span className="chat-user-last">{lastText}</span>
                 </div>
 
-                {/* 🔵 Unread badge */}
+                {/* Unread badge */}
                 {unreadCounts[admin._id] > 0 && (
                   <div className="unread-badge">
                     {unreadCounts[admin._id] > 99

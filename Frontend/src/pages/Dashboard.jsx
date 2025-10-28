@@ -32,31 +32,46 @@ export default function Dashboard() {
       socket.emit("joinUser", user._id);
     });
 
-    // 🔹 Receive initial unread + last message data
+    //Receive initial unread + last message data
     socket.on("initChatData", ({ unreadCounts, lastMessages }) => {
       setUnreadCounts(unreadCounts || {});
       setLastMessages(lastMessages || {});
     });
 
-    // 🔹 Increment unread count for sender
+    //Increment unread count for sender
     socket.on("incrementUnread", ({ sender }) => {
       setUnreadCounts((prev) => ({
         ...prev,
         [sender]: (prev[sender] || 0) + 1,
       }));
     });
+    socket.on("decrementUnreadCount", (sender) => {
+      console.log("decrementUnreadCount received:");
+      setUnreadCounts((prev) => ({
+        ...prev,
+        [sender]: Math.max((prev[sender] || 0) - 1, 0),
+      }));
+    });
 
-    // 🔹 Reset unread on read
+    // Recalculated unread count after deletion
+    socket.on("updateUnreadCount", ({ otherUserId, count }) => {
+      setUnreadCounts((prev) => ({
+        ...prev,
+        [otherUserId]: count,
+      }));
+    });
+
+    //Reset unread on read
     socket.on("messagesRead", ({ readerId }) => {
       setUnreadCounts((prev) => ({ ...prev, [readerId]: 0 }));
     });
 
-    // 🔹 Reset on explicit reset
+    //Reset on explicit reset
     socket.on("resetUnread", ({ sender }) => {
       setUnreadCounts((prev) => ({ ...prev, [sender]: 0 }));
     });
 
-    // 🔹 Update last message instantly when server notifies
+    //Update last message instantly when server notifies
     socket.on("updateLastMessage", ({ otherUserId, lastMessage }) => {
       setLastMessages((prev) => ({
         ...prev,
@@ -91,10 +106,16 @@ export default function Dashboard() {
     }
   };
 
+  // Sort admins by last message timestamp (latest on top)
+  const sortedAdmins = [...admins].sort((a, b) => {
+    const timeA = lastMessages[a._id]?.timestamp || 0;
+    const timeB = lastMessages[b._id]?.timestamp || 0;
+    return new Date(timeB) - new Date(timeA);
+  });
   return (
     <div className="chat-app-container">
       <Sidebar
-        admins={admins}
+        admins={sortedAdmins}
         loading={loading}
         onSelectAdmin={handleSelectAdmin}
         selectedAdmin={selectedAdmin}
