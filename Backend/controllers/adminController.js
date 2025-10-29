@@ -156,7 +156,7 @@ export const uploadFileMessage = async (req, res) => {
     // Message only for file upload (no text message)
     const newMessage = {
       sender,
-      message: "", // keep empty so schema remains valid
+      message: undefined, // keep empty so schema remains valid
       fileUrl,
       fileType,
       timestamp: new Date(),

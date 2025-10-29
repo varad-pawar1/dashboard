@@ -32,6 +32,7 @@ export default function ChatPanel({ user, admin, onClose }) {
           sender: msg.sender?._id || msg.sender,
         }));
         setMessages(normalized);
+        console.log("Chat history loaded:", normalized);
 
         socket.emit("markAsRead", {
           userId: user._id,
@@ -181,14 +182,6 @@ export default function ChatPanel({ user, admin, onClose }) {
     setMenuVisibleId((prev) => (prev === msg._id ? null : msg._id));
   };
 
-  // Handle file/image/video/ select
-  const handleFileSelect = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setSelectedFile(file);
-    setPreview(URL.createObjectURL(file));
-  };
-
   //  Show file dialog options
   const showFileDialog = () => {
     const fileOptions = document.querySelector(".file-options");
@@ -198,9 +191,79 @@ export default function ChatPanel({ user, admin, onClose }) {
     }
   };
 
-  // Send selected preview file
+  // Handle file uploads without creating duplicate messages
   const handleFileSend = async () => {
     if (!selectedFile) return;
+
+    try {
+      // Create FormData to send file
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      formData.append("sender", user._id);
+      formData.append("receiver", admin._id);
+
+      // Upload file to backend
+      const res = await APIADMIN.post("/chats/upload", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      // Get the uploaded message data from response
+      const uploadedMessage = res.data;
+
+      // ⚠️ IMPORTANT: Only emit notification, don't save again
+      // The backend already saved it, we just notify the room
+      const roomId = [user._id, admin._id].sort().join("-");
+
+      // Notify the room about the new file message
+      socket.emit("sendMessage", {
+        ...uploadedMessage,
+        sender: user._id,
+        receiver: admin._id,
+        _skipSave: true, // Flag to prevent duplicate save
+      });
+
+      // Clear preview and reset states
+      setPreview(null);
+      setSelectedFile(null);
+      setInputValue("");
+
+      // Reset file inputs
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (imageVideoInputRef.current) imageVideoInputRef.current.value = "";
+    } catch (err) {
+      console.error("Error uploading file:", err);
+      alert("Failed to send file. Please try again.");
+    }
+  };
+
+  // Update the handleFileSelect to also handle validation
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Optional: Add file size validation (e.g., max 10MB)
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+      alert("File size exceeds 10MB. Please select a smaller file.");
+      e.target.value = ""; // Reset input
+      return;
+    }
+
+    setSelectedFile(file);
+    setPreview(URL.createObjectURL(file));
+  };
+
+  // Cancel preview and clear all states
+  const handleCancelPreview = () => {
+    setPreview(null);
+    setSelectedFile(null);
+    setInputValue("");
+
+    // Reset file inputs
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (imageVideoInputRef.current) imageVideoInputRef.current.value = "";
   };
 
   // UI RENDER
@@ -231,19 +294,27 @@ export default function ChatPanel({ user, admin, onClose }) {
                 onClick={(e) => handleMessageClick(e, msg)}
               >
                 {msg.fileUrl ? (
-                  msg.fileType?.startsWith("image/") ? (
+                  // Fixed: Check fileType without slash
+                  msg.fileType === "image" ? (
                     <img
                       src={msg.fileUrl}
                       alt="upload"
                       className="chat-image"
                     />
-                  ) : msg.fileType?.startsWith("video/") ? (
+                  ) : msg.fileType === "video" ? (
                     <video src={msg.fileUrl} controls className="chat-video" />
-                  ) : (
-                    <a href={msg.fileUrl} target="_blank" rel="noreferrer">
-                      {msg.fileName || "Download File"}
+                  ) : msg.fileType === "document" ||
+                    msg.fileType === "other" ? (
+                    <a
+                      href={msg.fileUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="file-link"
+                    >
+                      <i className="fa-solid fa-file"></i>
+                      <span>{msg.fileName || "Download File"}</span>
                     </a>
-                  )
+                  ) : null
                 ) : (
                   <span>{msg.message}</span>
                 )}
@@ -256,7 +327,10 @@ export default function ChatPanel({ user, admin, onClose }) {
                     <button onClick={() => handleDelete(msg._id)}>
                       Delete
                     </button>
-                    <button onClick={() => handleEdit(msg)}>Edit</button>
+                    {/* Only show Edit for text messages, not files */}
+                    {!msg.fileUrl && (
+                      <button onClick={() => handleEdit(msg)}>Edit</button>
+                    )}
                   </div>
                 )}
               </div>
@@ -274,7 +348,7 @@ export default function ChatPanel({ user, admin, onClose }) {
             ) : (
               <p>{selectedFile.name}</p>
             )}
-            <button className="close-btn" onClick={() => setPreview(null)}>
+            <button className="close-btn" onClick={handleCancelPreview}>
               <i className="fa-solid fa-circle-xmark"></i>
             </button>
             <button className="send-btn" onClick={handleFileSend}>

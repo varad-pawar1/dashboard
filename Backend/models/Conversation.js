@@ -8,8 +8,8 @@ const messageSchema = new mongoose.Schema(
       required: true,
     },
     message: { type: String, default: "" },
-    fileUrl: { type: String, default: null }, // <--- new
-    fileType: { type: String, default: null }, // <--- new
+    fileUrl: { type: String, default: undefined }, // <--- new
+    fileType: { type: String, default: undefined }, // <--- new
     timestamp: { type: Date, default: Date.now },
     readBy: { type: Boolean, default: false },
   },

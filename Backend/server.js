@@ -79,10 +79,21 @@ io.on("connection", (socket) => {
   });
 
   //Send message (keep your existing logic)
+
   socket.on("sendMessage", async (data) => {
     try {
-      const { sender, receiver, message } = data;
-      const savedMsg = await saveMessage({ sender, receiver, message });
+      const { sender, receiver, message, _skipSave, fileUrl, fileType } = data;
+
+      let savedMsg;
+
+      // If _skipSave flag exists, it means the message is already saved
+      // Just broadcast it without saving again
+      if (_skipSave) {
+        savedMsg = data; // Use the data as-is (already from DB)
+      } else {
+        // Normal text message flow - save to database
+        savedMsg = await saveMessage({ sender, receiver, message });
+      }
 
       const roomId = getRoomId(sender, receiver);
 
@@ -97,11 +108,20 @@ io.on("connection", (socket) => {
         io.to(receiver).emit("incrementUnread", { sender });
       }
 
+      // Determine last message text for sidebar
+      const lastMessageText = fileUrl
+        ? fileType === "image"
+          ? "📷 Image"
+          : fileType === "video"
+          ? "🎥 Video"
+          : "📎 File"
+        : message;
+
       // Update sidebar of both users with the new last message
       io.to(sender).emit("updateLastMessage", {
         otherUserId: receiver,
         lastMessage: {
-          text: message,
+          text: lastMessageText,
           sender,
           timestamp: new Date(),
         },
@@ -110,7 +130,7 @@ io.on("connection", (socket) => {
       io.to(receiver).emit("updateLastMessage", {
         otherUserId: sender,
         lastMessage: {
-          text: message,
+          text: lastMessageText,
           sender,
           timestamp: new Date(),
         },

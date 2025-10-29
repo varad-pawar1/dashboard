@@ -23,6 +23,6 @@ router.get("/chats/:userId/:adminId", protect, chatUser);
 router.put("/chats/:id", protect, updateMessage);
 router.delete("/chats/:id", protect, deleteMessage);
 
-router.post("/upload", upload.single("file"), uploadFileMessage);
+router.post("/chats/upload", upload.single("file"), uploadFileMessage);
 
 export default router;

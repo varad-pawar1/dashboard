@@ -438,3 +438,35 @@
 .file-options ul li:hover {
   background-color: #f0f0f0;
 }
+
+.chat-image,
+.chat-video {
+  max-width: 300px;
+  max-height: 300px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.file-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 15px;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+
+.file-link:hover {
+  opacity: 0.8;
+}
+
+.sent .file-link {
+  background-color: #dcf8c6;
+  color: #075e54;
+}
+
+.received .file-link {
+  background-color: #fff;
+  color: #075e54;
+}
