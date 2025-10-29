@@ -61,10 +61,16 @@ io.on("connection", (socket) => {
         if (conv.lastMessage) {
           const lastMsg = await Message.findById(conv.lastMessage)
             .populate("sender", "name email")
-            .select("message sender createdAt");
+            .select("message sender createdAt fileUrl fileType");
           if (lastMsg) {
             lastMessages[otherUser] = {
-              text: lastMsg.message,
+              text: lastMsg.fileUrl
+                ? lastMsg.fileType === "image"
+                  ? "📷 Image"
+                  : lastMsg.fileType === "video"
+                  ? "🎥 Video"
+                  : "📎 File"
+                : lastMsg.message,
               sender: lastMsg.sender._id || lastMsg.sender,
               timestamp: lastMsg.createdAt,
             };
@@ -151,13 +157,12 @@ io.on("connection", (socket) => {
   socket.on("updateMessage", async (data) => {
     try {
       const { _id, message, sender, receiver } = data;
-      
+
       const updatedMessage = await Message.findByIdAndUpdate(
         _id,
         { message },
         { new: true }
-      )
-        .populate("sender", "name email");
+      ).populate("sender", "name email");
 
       if (!updatedMessage) return;
 
@@ -197,30 +202,41 @@ io.on("connection", (socket) => {
       const { _id, sender, receiver } = data;
       const roomId = getRoomId(sender, receiver);
 
-      // Find the message to get conversationId
-      const deletedMsg = await Message.findById(_id);
-      if (!deletedMsg) return;
-
-      const conversationId = deletedMsg.conversationId;
-
-      // Find the conversation
+      // Find the conversation first (message might already be deleted from API call)
       const conversation = await Conversation.findOne({
         participants: { $all: [sender, receiver] },
       });
 
-      if (!conversation) return;
+      if (!conversation) {
+        console.error("Conversation not found for delete notification");
+        return;
+      }
 
-      // Delete the message
-      await Message.findByIdAndDelete(_id);
+      const conversationId = conversation._id;
 
-      // Emit delete event to chat room
+      // Check if message still exists (might be deleted by API already)
+      const deletedMsg = await Message.findById(_id);
+
+      // If message exists, delete it (might not exist if already deleted by API)
+      if (
+        deletedMsg &&
+        deletedMsg.conversationId.toString() === conversationId.toString()
+      ) {
+        await Message.findByIdAndDelete(_id);
+      }
+
+      // Always emit delete event to chat room (for UI update)
       io.to(roomId).emit("deleteMessage", _id);
+
+      // Also emit to individual users to ensure they receive it
+      io.to(sender).emit("deleteMessage", _id);
+      io.to(receiver).emit("deleteMessage", _id);
 
       // Update conversation's lastMessage if needed
       if (conversation.lastMessage?.toString() === _id) {
         const lastMsg = await Message.findOne({ conversationId })
           .sort({ createdAt: -1 })
-          .select("_id message sender createdAt");
+          .select("_id");
         conversation.lastMessage = lastMsg ? lastMsg._id : null;
       }
       conversation.updatedAt = new Date();
@@ -249,20 +265,27 @@ io.on("connection", (socket) => {
         });
       }
 
-      // 📩 Update last message for both users
+      // 📩 Update last message for both users (always update, even if not changed)
       const lastMsg = await Message.findOne({ conversationId })
         .sort({ createdAt: -1 })
         .populate("sender", "name email")
-        .select("message sender createdAt");
+        .select("message sender createdAt fileUrl fileType");
 
       const lastMessageData = lastMsg
         ? {
-            text: lastMsg.message,
+            text: lastMsg.fileUrl
+              ? lastMsg.fileType === "image"
+                ? "📷 Image"
+                : lastMsg.fileType === "video"
+                ? "🎥 Video"
+                : "📎 File"
+              : lastMsg.message,
             sender: lastMsg.sender._id || lastMsg.sender,
             timestamp: lastMsg.createdAt,
           }
         : null;
 
+      // Emit to both users to update their sidebars
       io.to(sender).emit("updateLastMessage", {
         otherUserId: receiver,
         lastMessage: lastMessageData,

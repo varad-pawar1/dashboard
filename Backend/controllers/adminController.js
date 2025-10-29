@@ -136,7 +136,12 @@ export const deleteMessage = async (req, res) => {
 
     // Update conversation's updatedAt and lastMessage if needed
     const conversation = await Conversation.findById(conversationId);
-    if (conversation && conversation.lastMessage?.toString() === id) {
+    if (!conversation) {
+      return res.status(404).json({ message: "Conversation not found" });
+    }
+
+    // Update lastMessage if the deleted message was the last one
+    if (conversation.lastMessage?.toString() === id) {
       // Get the new last message
       const lastMessage = await Message.findOne({ conversationId })
         .sort({ createdAt: -1 })
@@ -146,7 +151,7 @@ export const deleteMessage = async (req, res) => {
     conversation.updatedAt = new Date();
     await conversation.save();
 
-    // Return success
+    // Return success (socket handler will handle live updates)
     res.json({ message: "Message deleted", id });
   } catch (err) {
     console.error("DeleteMessage Error:", err);
