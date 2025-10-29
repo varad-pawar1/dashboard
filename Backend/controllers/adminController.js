@@ -2,6 +2,7 @@ import User from "../models/User.js";
 import dotenv from "dotenv";
 import { sendResetLinkEmail } from "../utils/mailer.js";
 import Conversation from "../models/Conversation.js";
+import path from "path";
 
 import jwt from "jsonwebtoken";
 dotenv.config();
@@ -122,6 +123,61 @@ export const deleteMessage = async (req, res) => {
     res.json({ message: "Message deleted", id });
   } catch (err) {
     console.error("DeleteMessage Error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// detect file type by extension
+const detectFileType = (filename) => {
+  const ext = path.extname(filename).toLowerCase();
+  if ([".jpg", ".jpeg", ".png", ".gif", ".webp"].includes(ext)) return "image";
+  if ([".mp4", ".mov", ".avi", ".mkv"].includes(ext)) return "video";
+  if ([".pdf", ".doc", ".docx", ".xls", ".xlsx", ".txt"].includes(ext))
+    return "document";
+  return "other";
+};
+
+// 📤 Upload file/image/video message to Cloudinary
+export const uploadFileMessage = async (req, res) => {
+  try {
+    const { sender, receiver } = req.body;
+    const file = req.file;
+
+    if (!file) return res.status(400).json({ message: "No file uploaded" });
+
+    // Cloudinary gives URL directly in file.path
+    const fileUrl = file.path;
+    const fileType = detectFileType(file.originalname);
+
+    const participants = [sender, receiver].sort();
+
+    let conversation = await Conversation.findOne({ participants });
+
+    // Message only for file upload (no text message)
+    const newMessage = {
+      sender,
+      message: "", // keep empty so schema remains valid
+      fileUrl,
+      fileType,
+      timestamp: new Date(),
+    };
+
+    if (!conversation) {
+      conversation = new Conversation({
+        participants,
+        messages: [newMessage],
+      });
+    } else {
+      conversation.messages.push(newMessage);
+      conversation.updatedAt = new Date();
+    }
+
+    await conversation.save();
+
+    const savedMsg = conversation.messages[conversation.messages.length - 1];
+    res.status(200).json(savedMsg);
+  } catch (error) {
+    console.error("uploadFileMessage Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };

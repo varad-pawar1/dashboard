@@ -9,11 +9,16 @@ export default function ChatPanel({ user, admin, onClose }) {
   const [inputValue, setInputValue] = useState("");
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [menuVisibleId, setMenuVisibleId] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
+
   const scrollRef = useRef();
   const inputRef = useRef();
-
+  const fileInputRef = useRef();
+  const imageVideoInputRef = useRef();
   const roomId = [user._id, admin._id].sort().join("-");
 
+  // 🔌 SOCKET INIT
   useEffect(() => {
     setInputValue("");
     socket = io(`${import.meta.env.VITE_BACKEND_URL}`);
@@ -28,7 +33,6 @@ export default function ChatPanel({ user, admin, onClose }) {
         }));
         setMessages(normalized);
 
-        // Once loaded, mark all as read
         socket.emit("markAsRead", {
           userId: user._id,
           otherUserId: admin._id,
@@ -36,10 +40,8 @@ export default function ChatPanel({ user, admin, onClose }) {
       })
       .catch(console.error);
 
-    // Focus input on mount
     inputRef.current?.focus();
 
-    // Socket listeners
     socket.on("receiveMessage", (msg) => {
       const normalizedMsg = { ...msg, sender: msg.sender?._id || msg.sender };
       setMessages((prev) =>
@@ -48,7 +50,6 @@ export default function ChatPanel({ user, admin, onClose }) {
           : [...prev, normalizedMsg]
       );
 
-      // Auto mark as read if chat is open
       if (normalizedMsg.sender !== user._id) {
         socket.emit("markAsRead", {
           userId: user._id,
@@ -67,7 +68,6 @@ export default function ChatPanel({ user, admin, onClose }) {
           String(m._id) === String(normalized._id) ? normalized : m
         )
       );
-
       if (editingMessageId === normalized._id) {
         setEditingMessageId(null);
         setInputValue("");
@@ -92,23 +92,20 @@ export default function ChatPanel({ user, admin, onClose }) {
       socket.off("deleteMessage");
       socket.disconnect();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user._id, admin._id]);
 
-  //Auto-scroll
-
+  // Auto-scroll
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   const isEditing = Boolean(editingMessageId);
 
-  //Send or Update Message
-
+  // SEND MESSAGE
   const handleSend = async () => {
     if (!inputValue.trim()) return;
 
-    if (isEditing) {
+    if (editingMessageId) {
       try {
         const res = await APIADMIN.put(`/chats/${editingMessageId}`, {
           message: inputValue,
@@ -119,19 +116,8 @@ export default function ChatPanel({ user, admin, onClose }) {
           sender: user._id,
           receiver: admin._id,
         });
-        setMessages((prev) =>
-          prev.map((m) =>
-            String(m._id) === String(updatedMsg._id)
-              ? {
-                  ...updatedMsg,
-                  sender: updatedMsg.sender?._id || updatedMsg.sender,
-                }
-              : m
-          )
-        );
         setEditingMessageId(null);
         setInputValue("");
-        setMenuVisibleId(null);
       } catch (err) {
         console.error(err);
       }
@@ -146,8 +132,7 @@ export default function ChatPanel({ user, admin, onClose }) {
     }
   };
 
-  //Delete Message
-
+  // Delete message
   const handleDelete = async (msgId) => {
     try {
       await APIADMIN.delete(`/chats/${msgId}`);
@@ -169,8 +154,7 @@ export default function ChatPanel({ user, admin, onClose }) {
     }
   };
 
-  //Edit Message
-
+  // Edit message
   const handleEdit = (msg) => {
     setMenuVisibleId(null);
     setEditingMessageId(msg._id);
@@ -185,8 +169,6 @@ export default function ChatPanel({ user, admin, onClose }) {
     inputRef.current?.focus();
   };
 
-  //Menu Handling
-
   useEffect(() => {
     const handleClickOutside = () => setMenuVisibleId(null);
     document.addEventListener("click", handleClickOutside);
@@ -199,8 +181,29 @@ export default function ChatPanel({ user, admin, onClose }) {
     setMenuVisibleId((prev) => (prev === msg._id ? null : msg._id));
   };
 
-  //Render
+  // Handle file/image/video/ select
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setSelectedFile(file);
+    setPreview(URL.createObjectURL(file));
+  };
 
+  //  Show file dialog options
+  const showFileDialog = () => {
+    const fileOptions = document.querySelector(".file-options");
+    if (fileOptions) {
+      fileOptions.style.display =
+        fileOptions.style.display === "block" ? "none" : "block";
+    }
+  };
+
+  // Send selected preview file
+  const handleFileSend = async () => {
+    if (!selectedFile) return;
+  };
+
+  // UI RENDER
   return (
     <div className="chat-panel-backdrop">
       <div className="chat-panel" onClick={(e) => e.stopPropagation()}>
@@ -211,6 +214,7 @@ export default function ChatPanel({ user, admin, onClose }) {
           </button>
         </div>
 
+        {/* Chat Messages */}
         <div className="chat-messages">
           {messages.map((msg, index) => {
             const isSentByUser = String(msg.sender) === String(user._id);
@@ -226,7 +230,23 @@ export default function ChatPanel({ user, admin, onClose }) {
                 ref={index === messages.length - 1 ? scrollRef : null}
                 onClick={(e) => handleMessageClick(e, msg)}
               >
-                <span>{msg.message}</span>
+                {msg.fileUrl ? (
+                  msg.fileType?.startsWith("image/") ? (
+                    <img
+                      src={msg.fileUrl}
+                      alt="upload"
+                      className="chat-image"
+                    />
+                  ) : msg.fileType?.startsWith("video/") ? (
+                    <video src={msg.fileUrl} controls className="chat-video" />
+                  ) : (
+                    <a href={msg.fileUrl} target="_blank" rel="noreferrer">
+                      {msg.fileName || "Download File"}
+                    </a>
+                  )
+                ) : (
+                  <span>{msg.message}</span>
+                )}
 
                 {isSentByUser && menuVisibleId === msg._id && !isEditing && (
                   <div
@@ -244,7 +264,75 @@ export default function ChatPanel({ user, admin, onClose }) {
           })}
         </div>
 
+        {/* File Preview Box */}
+        {preview && (
+          <div className="preview-box">
+            {selectedFile?.type.startsWith("image/") ? (
+              <img src={preview} alt="preview" width="120" />
+            ) : selectedFile?.type.startsWith("video/") ? (
+              <video src={preview} controls width="150" />
+            ) : (
+              <p>{selectedFile.name}</p>
+            )}
+            <button className="close-btn" onClick={() => setPreview(null)}>
+              <i className="fa-solid fa-circle-xmark"></i>
+            </button>
+            <button className="send-btn" onClick={handleFileSend}>
+              Send
+            </button>
+          </div>
+        )}
+
+        {/* Chat Input Section */}
         <div className="chat-input">
+          <div className="attach-icon">
+            <i
+              className="fa-solid fa-paperclip fa-rotate-180"
+              onClick={showFileDialog}
+            ></i>
+            <div style={{ display: "none" }} className="file-options">
+              <ul>
+                <li
+                  onClick={() => {
+                    imageVideoInputRef.current.click();
+                    showFileDialog();
+                  }}
+                >
+                  <i className="fa-solid fa-image"></i>
+                  <i className="fa-solid fa-video"></i>
+                  <p>Image/Video</p>
+                </li>
+
+                <li
+                  onClick={() => {
+                    fileInputRef.current.click();
+                    showFileDialog();
+                  }}
+                >
+                  <i className="fa-solid fa-file"></i>
+                  <p>File</p>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Inputs */}
+          <input
+            type="file"
+            ref={imageVideoInputRef}
+            accept="image/*,video/*"
+            style={{ display: "none" }}
+            onChange={handleFileSelect}
+          />
+
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.zip,.rar,.ppt,.pptx"
+            style={{ display: "none" }}
+            onChange={handleFileSelect}
+          />
+
           <input
             ref={inputRef}
             type="text"
@@ -255,13 +343,14 @@ export default function ChatPanel({ user, admin, onClose }) {
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
           />
+
           {isEditing ? (
             <>
               <button onClick={handleSend}>Update</button>
               <button onClick={cancelEdit}>Cancel</button>
             </>
           ) : (
-            <button onClick={handleSend}>Send</button>
+            <button onClick={() => handleSend()}>Send</button>
           )}
         </div>
       </div>

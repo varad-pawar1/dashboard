@@ -7,7 +7,9 @@ import {
   sendResetLink,
   updateMessage,
   deleteMessage,
+  uploadFileMessage,
 } from "../controllers/adminController.js";
+import { upload } from "../middleware/upload.js";
 
 const router = express.Router();
 
@@ -20,4 +22,7 @@ router.post("/reset-password/:token", resetPassword);
 router.get("/chats/:userId/:adminId", protect, chatUser);
 router.put("/chats/:id", protect, updateMessage);
 router.delete("/chats/:id", protect, deleteMessage);
+
+router.post("/upload", upload.single("file"), uploadFileMessage);
+
 export default router;
