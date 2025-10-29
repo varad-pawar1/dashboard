@@ -169,7 +169,7 @@ const detectFileType = (filename) => {
   return "other";
 };
 
-// 📤 Upload file/image/video message to Cloudinary
+// Upload file/image/video message to Cloudinary
 export const uploadFileMessage = async (req, res) => {
   try {
     const { sender, receiver } = req.body;

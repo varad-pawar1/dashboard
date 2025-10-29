@@ -221,14 +221,14 @@ export default function ChatPanel({ user, admin, onClose }) {
       // Get the uploaded message data from response
       const uploadedMessage = res.data;
 
-      // ⚠️ IMPORTANT: Only emit notification, don't save again
       // The backend already saved it, we just notify the room
       const roomId = [user._id, admin._id].sort().join("-");
 
       // Normalize uploaded message for socket emission
       const normalizedUploadedMsg = {
         ...uploadedMessage,
-        sender: uploadedMessage.sender?._id || uploadedMessage.sender || user._id,
+        sender:
+          uploadedMessage.sender?._id || uploadedMessage.sender || user._id,
         receiver: admin._id,
         // Ensure timestamp compatibility
         timestamp: uploadedMessage.createdAt || uploadedMessage.timestamp,

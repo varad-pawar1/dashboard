@@ -242,7 +242,7 @@ io.on("connection", (socket) => {
       conversation.updatedAt = new Date();
       await conversation.save();
 
-      // 🔁 Recalculate unread counts for both participants
+      // Recalculate unread counts for both participants
       const unreadCounts = {};
       for (const participant of conversation.participants) {
         const unreadMsgs = await Message.countDocuments({
@@ -253,7 +253,7 @@ io.on("connection", (socket) => {
         unreadCounts[participant.toString()] = unreadMsgs;
       }
 
-      // 📨 Send updated unread count to each participant
+      //Send updated unread count to each participant
       for (const participant of conversation.participants) {
         const otherUser = conversation.participants.find(
           (p) => p.toString() !== participant.toString()
@@ -265,7 +265,7 @@ io.on("connection", (socket) => {
         });
       }
 
-      // 📩 Update last message for both users (always update, even if not changed)
+      // Update last message for both users (always update, even if not changed)
       const lastMsg = await Message.findOne({ conversationId })
         .sort({ createdAt: -1 })
         .populate("sender", "name email")
