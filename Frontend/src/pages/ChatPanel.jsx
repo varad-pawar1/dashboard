@@ -30,6 +30,8 @@ export default function ChatPanel({ user, admin, onClose }) {
         const normalized = res.data.map((msg) => ({
           ...msg,
           sender: msg.sender?._id || msg.sender,
+          // Ensure timestamp compatibility (use createdAt if timestamp doesn't exist)
+          timestamp: msg.createdAt || msg.timestamp,
         }));
         setMessages(normalized);
         console.log("Chat history loaded:", normalized);
@@ -44,7 +46,12 @@ export default function ChatPanel({ user, admin, onClose }) {
     inputRef.current?.focus();
 
     socket.on("receiveMessage", (msg) => {
-      const normalizedMsg = { ...msg, sender: msg.sender?._id || msg.sender };
+      const normalizedMsg = {
+        ...msg,
+        sender: msg.sender?._id || msg.sender,
+        // Ensure timestamp compatibility (use createdAt if timestamp doesn't exist)
+        timestamp: msg.createdAt || msg.timestamp,
+      };
       setMessages((prev) =>
         prev.some((m) => String(m._id) === String(normalizedMsg._id))
           ? prev
@@ -63,6 +70,8 @@ export default function ChatPanel({ user, admin, onClose }) {
       const normalized = {
         ...updatedMsg,
         sender: updatedMsg.sender?._id || updatedMsg.sender,
+        // Ensure timestamp compatibility (use createdAt if timestamp doesn't exist)
+        timestamp: updatedMsg.createdAt || updatedMsg.timestamp,
       };
       setMessages((prev) =>
         prev.map((m) =>
@@ -216,13 +225,18 @@ export default function ChatPanel({ user, admin, onClose }) {
       // The backend already saved it, we just notify the room
       const roomId = [user._id, admin._id].sort().join("-");
 
-      // Notify the room about the new file message
-      socket.emit("sendMessage", {
+      // Normalize uploaded message for socket emission
+      const normalizedUploadedMsg = {
         ...uploadedMessage,
-        sender: user._id,
+        sender: uploadedMessage.sender?._id || uploadedMessage.sender || user._id,
         receiver: admin._id,
+        // Ensure timestamp compatibility
+        timestamp: uploadedMessage.createdAt || uploadedMessage.timestamp,
         _skipSave: true, // Flag to prevent duplicate save
-      });
+      };
+
+      // Notify the room about the new file message
+      socket.emit("sendMessage", normalizedUploadedMsg);
 
       // Clear preview and reset states
       setPreview(null);

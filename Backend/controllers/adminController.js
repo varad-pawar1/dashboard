@@ -2,6 +2,7 @@ import User from "../models/User.js";
 import dotenv from "dotenv";
 import { sendResetLinkEmail } from "../utils/mailer.js";
 import Conversation from "../models/Conversation.js";
+import Message from "../models/Message.js";
 import path from "path";
 
 import jwt from "jsonwebtoken";
@@ -28,10 +29,17 @@ export const chatUser = async (req, res) => {
   try {
     const conversation = await Conversation.findOne({
       participants: { $all: [userId, adminId] },
-    }).populate("messages.sender", "name email");
+    });
 
     if (!conversation) return res.json([]);
-    res.json(conversation.messages);
+
+    // Fetch messages for this conversation
+    const messages = await Message.find({ conversationId: conversation._id })
+      .sort({ createdAt: 1 })
+      .populate("sender", "name email")
+      .populate("readBy", "name email");
+
+    res.json(messages);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -50,18 +58,30 @@ export const saveMessage = async ({ sender, receiver, message }) => {
       // If no conversation exists, create one
       conversation = new Conversation({
         participants,
-        messages: [{ sender, message }],
       });
-    } else {
-      // Add new message to existing conversation
-      conversation.messages.push({ sender, message });
+      await conversation.save();
     }
 
-    conversation.updatedAt = new Date(); // update timestamp
+    // Create new message in Message collection
+    const newMessage = new Message({
+      conversationId: conversation._id,
+      sender,
+      message,
+      readBy: [],
+    });
+
+    await newMessage.save();
+
+    // Update conversation's lastMessage and updatedAt
+    conversation.lastMessage = newMessage._id;
+    conversation.updatedAt = new Date();
     await conversation.save();
 
+    // Populate sender before returning
+    await newMessage.populate("sender", "name email");
+
     // Return the newly added message
-    return conversation.messages[conversation.messages.length - 1];
+    return newMessage;
   } catch (err) {
     console.error("saveMessage Error:", err);
     throw err;
@@ -74,27 +94,25 @@ export const updateMessage = async (req, res) => {
   const { message } = req.body;
 
   try {
-    // 1️⃣ Find conversation that contains this message
-    const conversation = await Conversation.findOne({ "messages._id": id });
-    if (!conversation)
+    // Find and update the message
+    const updatedMessage = await Message.findByIdAndUpdate(
+      id,
+      { message },
+      { new: true }
+    )
+      .populate("sender", "name email")
+      .populate("readBy", "name email");
+
+    if (!updatedMessage)
       return res.status(404).json({ message: "Message not found" });
 
-    // 2️⃣ Find the message in the conversation
-    const msgIndex = conversation.messages.findIndex(
-      (m) => m._id.toString() === id
-    );
-    if (msgIndex === -1)
-      return res.status(404).json({ message: "Message not found" });
+    // Update conversation's updatedAt
+    await Conversation.findByIdAndUpdate(updatedMessage.conversationId, {
+      updatedAt: new Date(),
+    });
 
-    // 3️⃣ Update message text & timestamp
-    conversation.messages[msgIndex].message = message;
-    conversation.messages[msgIndex].timestamp = new Date();
-
-    // 4️⃣ Save conversation
-    await conversation.save();
-
-    // 5️⃣ Return updated message
-    res.json(conversation.messages[msgIndex]);
+    // Return updated message
+    res.json(updatedMessage);
   } catch (err) {
     console.error("UpdateMessage Error:", err);
     res.status(500).json({ message: "Server error" });
@@ -106,20 +124,29 @@ export const deleteMessage = async (req, res) => {
   const { id } = req.params; // message ID
 
   try {
-    // 1️⃣ Find conversation containing this message
-    const conversation = await Conversation.findOne({ "messages._id": id });
-    if (!conversation)
+    // Find the message to get conversationId
+    const messageToDelete = await Message.findById(id);
+    if (!messageToDelete)
       return res.status(404).json({ message: "Message not found" });
 
-    // 2️⃣ Filter out the message
-    conversation.messages = conversation.messages.filter(
-      (m) => m._id.toString() !== id
-    );
+    const conversationId = messageToDelete.conversationId;
 
-    // 3️⃣ Save conversation
+    // Delete the message
+    await Message.findByIdAndDelete(id);
+
+    // Update conversation's updatedAt and lastMessage if needed
+    const conversation = await Conversation.findById(conversationId);
+    if (conversation && conversation.lastMessage?.toString() === id) {
+      // Get the new last message
+      const lastMessage = await Message.findOne({ conversationId })
+        .sort({ createdAt: -1 })
+        .select("_id");
+      conversation.lastMessage = lastMessage ? lastMessage._id : null;
+    }
+    conversation.updatedAt = new Date();
     await conversation.save();
 
-    // 4️⃣ Return success
+    // Return success
     res.json({ message: "Message deleted", id });
   } catch (err) {
     console.error("DeleteMessage Error:", err);
@@ -153,29 +180,34 @@ export const uploadFileMessage = async (req, res) => {
 
     let conversation = await Conversation.findOne({ participants });
 
-    // Message only for file upload (no text message)
-    const newMessage = {
-      sender,
-      message: undefined, // keep empty so schema remains valid
-      fileUrl,
-      fileType,
-      timestamp: new Date(),
-    };
-
     if (!conversation) {
       conversation = new Conversation({
         participants,
-        messages: [newMessage],
       });
-    } else {
-      conversation.messages.push(newMessage);
-      conversation.updatedAt = new Date();
+      await conversation.save();
     }
 
+    // Create new message in Message collection
+    const newMessage = new Message({
+      conversationId: conversation._id,
+      sender,
+      message: "", // empty string for file-only messages
+      fileUrl,
+      fileType,
+      readBy: [],
+    });
+
+    await newMessage.save();
+
+    // Update conversation's lastMessage and updatedAt
+    conversation.lastMessage = newMessage._id;
+    conversation.updatedAt = new Date();
     await conversation.save();
 
-    const savedMsg = conversation.messages[conversation.messages.length - 1];
-    res.status(200).json(savedMsg);
+    // Populate sender before returning
+    await newMessage.populate("sender", "name email");
+
+    res.status(200).json(newMessage);
   } catch (error) {
     console.error("uploadFileMessage Error:", error);
     res.status(500).json({ message: "Server error" });

@@ -1,27 +1,32 @@
 import mongoose from "mongoose";
 
-const messageSchema = new mongoose.Schema(
-  {
-    sender: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-    },
-    message: { type: String, default: "" },
-    fileUrl: { type: String, default: undefined }, // <--- new
-    fileType: { type: String, default: undefined }, // <--- new
-    timestamp: { type: Date, default: Date.now },
-    readBy: { type: Boolean, default: false },
-  },
-  { _id: true }
-);
-
 const conversationSchema = new mongoose.Schema(
   {
+    // Group chat fields (preserved for future use)
+    isGroup: { type: Boolean, default: false },
+
+    // For private chat, participants = 2 users
+    // For group chat, participants can be many
     participants: [
       { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     ],
-    messages: [messageSchema],
+
+    // Group chat fields (preserved for future use)
+    groupName: { type: String },
+    groupAvatar: { type: String },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    admins: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+
+    // last message info (for sidebar previews) - preserved for future use
+    lastMessage: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Message",
+      default: null,
+    },
+
+    // typing indicators, last activity timestamps etc.
+    lastActive: { type: Date, default: Date.now },
+
     updatedAt: { type: Date, default: Date.now },
   },
   { timestamps: true }

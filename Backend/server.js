@@ -9,6 +9,7 @@ import http from "http";
 import { Server } from "socket.io";
 import { saveMessage } from "./controllers/adminController.js";
 import Conversation from "./models/Conversation.js";
+import Message from "./models/Message.js";
 
 dotenv.config();
 const app = express();
@@ -43,27 +44,33 @@ io.on("connection", (socket) => {
       const unreadCounts = {};
       const lastMessages = {};
 
-      conversations.forEach((conv) => {
+      for (const conv of conversations) {
         const otherUser = conv.participants.find(
           (p) => p.toString() !== userId
         );
 
-        //Count unread messages
-        const unreadMsgs = conv.messages.filter(
-          (m) => m.sender.toString() !== userId && !m.readBy
-        );
-        unreadCounts[otherUser] = unreadMsgs.length;
+        // Count unread messages (messages not sent by user and not read by user)
+        const unreadMsgs = await Message.countDocuments({
+          conversationId: conv._id,
+          sender: { $ne: userId },
+          readBy: { $ne: userId },
+        });
+        unreadCounts[otherUser] = unreadMsgs;
 
-        //Get last message (if any)
-        if (conv.messages.length > 0) {
-          const lastMsg = conv.messages[conv.messages.length - 1];
-          lastMessages[otherUser] = {
-            text: lastMsg.message,
-            sender: lastMsg.sender,
-            timestamp: lastMsg.timestamp,
-          };
+        // Get last message (if any)
+        if (conv.lastMessage) {
+          const lastMsg = await Message.findById(conv.lastMessage)
+            .populate("sender", "name email")
+            .select("message sender createdAt");
+          if (lastMsg) {
+            lastMessages[otherUser] = {
+              text: lastMsg.message,
+              sender: lastMsg.sender._id || lastMsg.sender,
+              timestamp: lastMsg.createdAt,
+            };
+          }
         }
-      });
+      }
 
       //  Send both unread counts and last messages to user
       socket.emit("initChatData", { unreadCounts, lastMessages });
@@ -109,13 +116,13 @@ io.on("connection", (socket) => {
       }
 
       // Determine last message text for sidebar
-      const lastMessageText = fileUrl
-        ? fileType === "image"
+      const lastMessageText = savedMsg.fileUrl
+        ? savedMsg.fileType === "image"
           ? "📷 Image"
-          : fileType === "video"
+          : savedMsg.fileType === "video"
           ? "🎥 Video"
           : "📎 File"
-        : message;
+        : savedMsg.message || message;
 
       // Update sidebar of both users with the new last message
       io.to(sender).emit("updateLastMessage", {
@@ -123,7 +130,7 @@ io.on("connection", (socket) => {
         lastMessage: {
           text: lastMessageText,
           sender,
-          timestamp: new Date(),
+          timestamp: savedMsg.createdAt || new Date(),
         },
       });
 
@@ -132,7 +139,7 @@ io.on("connection", (socket) => {
         lastMessage: {
           text: lastMessageText,
           sender,
-          timestamp: new Date(),
+          timestamp: savedMsg.createdAt || new Date(),
         },
       });
     } catch (err) {
@@ -140,31 +147,34 @@ io.on("connection", (socket) => {
     }
   });
 
-  //Update message (unchanged)
+  //Update message
   socket.on("updateMessage", async (data) => {
     try {
       const { _id, message, sender, receiver } = data;
-      const conversation = await Conversation.findOne({ "messages._id": _id });
-      if (!conversation) return;
+      
+      const updatedMessage = await Message.findByIdAndUpdate(
+        _id,
+        { message },
+        { new: true }
+      )
+        .populate("sender", "name email");
 
-      const index = conversation.messages.findIndex(
-        (m) => m._id.toString() === _id
-      );
-      if (index === -1) return;
+      if (!updatedMessage) return;
 
-      conversation.messages[index].message = message;
-      conversation.messages[index].timestamp = new Date();
-      await conversation.save();
+      // Update conversation's updatedAt
+      await Conversation.findByIdAndUpdate(updatedMessage.conversationId, {
+        updatedAt: new Date(),
+      });
 
       const roomId = getRoomId(sender, receiver);
-      io.to(roomId).emit("updateMessage", conversation.messages[index]);
+      io.to(roomId).emit("updateMessage", updatedMessage);
 
       io.to(sender).emit("updateLastMessage", {
         otherUserId: receiver,
         lastMessage: {
           text: message,
           sender,
-          timestamp: new Date(),
+          timestamp: updatedMessage.createdAt,
         },
       });
 
@@ -173,7 +183,7 @@ io.on("connection", (socket) => {
         lastMessage: {
           text: message,
           sender,
-          timestamp: new Date(),
+          timestamp: updatedMessage.createdAt,
         },
       });
     } catch (err) {
@@ -187,8 +197,11 @@ io.on("connection", (socket) => {
       const { _id, sender, receiver } = data;
       const roomId = getRoomId(sender, receiver);
 
-      // Emit delete event to chat room
-      io.to(roomId).emit("deleteMessage", _id);
+      // Find the message to get conversationId
+      const deletedMsg = await Message.findById(_id);
+      if (!deletedMsg) return;
+
+      const conversationId = deletedMsg.conversationId;
 
       // Find the conversation
       const conversation = await Conversation.findOne({
@@ -197,24 +210,31 @@ io.on("connection", (socket) => {
 
       if (!conversation) return;
 
-      // Find deleted message (to know if it was unread)
-      const deletedMsg = conversation.messages.find(
-        (m) => m._id.toString() === _id
-      );
+      // Delete the message
+      await Message.findByIdAndDelete(_id);
 
-      // Remove the message
-      conversation.messages = conversation.messages.filter(
-        (m) => m._id.toString() !== _id
-      );
+      // Emit delete event to chat room
+      io.to(roomId).emit("deleteMessage", _id);
+
+      // Update conversation's lastMessage if needed
+      if (conversation.lastMessage?.toString() === _id) {
+        const lastMsg = await Message.findOne({ conversationId })
+          .sort({ createdAt: -1 })
+          .select("_id message sender createdAt");
+        conversation.lastMessage = lastMsg ? lastMsg._id : null;
+      }
+      conversation.updatedAt = new Date();
       await conversation.save();
 
       // 🔁 Recalculate unread counts for both participants
       const unreadCounts = {};
       for (const participant of conversation.participants) {
-        const unreadMsgs = conversation.messages.filter(
-          (m) => m.sender.toString() !== participant.toString() && !m.readBy
-        );
-        unreadCounts[participant.toString()] = unreadMsgs.length;
+        const unreadMsgs = await Message.countDocuments({
+          conversationId: conversation._id,
+          sender: { $ne: participant.toString() },
+          readBy: { $ne: participant.toString() },
+        });
+        unreadCounts[participant.toString()] = unreadMsgs;
       }
 
       // 📨 Send updated unread count to each participant
@@ -230,16 +250,16 @@ io.on("connection", (socket) => {
       }
 
       // 📩 Update last message for both users
-      const lastMsg =
-        conversation.messages.length > 0
-          ? conversation.messages[conversation.messages.length - 1]
-          : null;
+      const lastMsg = await Message.findOne({ conversationId })
+        .sort({ createdAt: -1 })
+        .populate("sender", "name email")
+        .select("message sender createdAt");
 
       const lastMessageData = lastMsg
         ? {
             text: lastMsg.message,
-            sender: lastMsg.sender,
-            timestamp: lastMsg.timestamp,
+            sender: lastMsg.sender._id || lastMsg.sender,
+            timestamp: lastMsg.createdAt,
           }
         : null;
 
@@ -265,21 +285,25 @@ io.on("connection", (socket) => {
       });
       if (!conversation) return;
 
-      let updated = false;
-      conversation.messages.forEach((msg) => {
-        if (msg.sender.toString() !== userId && !msg.readBy) {
-          msg.readBy = true;
-          updated = true;
+      // Update all unread messages: add userId to readBy array if not already present
+      const result = await Message.updateMany(
+        {
+          conversationId: conversation._id,
+          sender: { $ne: userId },
+          readBy: { $ne: userId },
+        },
+        {
+          $addToSet: { readBy: userId },
         }
-      });
+      );
 
-      if (updated) await conversation.save();
+      if (result.modifiedCount > 0) {
+        const roomId = [userId, otherUserId].sort().join("-");
+        io.to(roomId).emit("messagesRead", { readerId: userId });
 
-      const roomId = [userId, otherUserId].sort().join("-");
-      io.to(roomId).emit("messagesRead", { readerId: userId });
-
-      //Also reset unread count in receiver's sidebar
-      io.to(userId).emit("resetUnread", { sender: otherUserId });
+        //Also reset unread count in receiver's sidebar
+        io.to(userId).emit("resetUnread", { sender: otherUserId });
+      }
     } catch (err) {
       console.error("markAsRead socket error:", err);
     }

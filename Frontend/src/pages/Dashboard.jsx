@@ -108,8 +108,12 @@ export default function Dashboard() {
 
   // Sort admins by last message timestamp (latest on top)
   const sortedAdmins = [...admins].sort((a, b) => {
-    const timeA = lastMessages[a._id]?.timestamp || 0;
-    const timeB = lastMessages[b._id]?.timestamp || 0;
+    // Backend sends timestamp in socket events (mapped from createdAt)
+    // Fallback to createdAt if timestamp doesn't exist for compatibility
+    const timeA =
+      lastMessages[a._id]?.timestamp || lastMessages[a._id]?.createdAt || 0;
+    const timeB =
+      lastMessages[b._id]?.timestamp || lastMessages[b._id]?.createdAt || 0;
     return new Date(timeB) - new Date(timeA);
   });
   return (
