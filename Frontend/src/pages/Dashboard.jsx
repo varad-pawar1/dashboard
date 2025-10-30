@@ -10,17 +10,19 @@ import { Sidebar } from "./Sidebar";
 import ChatPanel from "./ChatPanel";
 import "../styles/dashboard.css";
 import { io } from "socket.io-client";
+import NewGroup from "./NewGroup";
 
 let socket;
 
 export default function Dashboard() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { user, admins, loading } = useSelector((state) => state.admin);
+  const { user, admins, groups, loading } = useSelector((state) => state.admin);
 
   const [selectedAdmin, setSelectedAdmin] = useState(null);
   const [unreadCounts, setUnreadCounts] = useState({});
   const [lastMessages, setLastMessages] = useState({});
+  const [isCreatingGroup, setIsCreatingGroup] = useState(false);
 
   useEffect(() => {
     if (!user?._id) return;
@@ -106,6 +108,13 @@ export default function Dashboard() {
     }
   };
 
+  const handleGroupClick = () => {
+    setIsCreatingGroup(true);
+    setSelectedAdmin(null);
+  };
+  const handleCloseGroupCreator = () => {
+    setIsCreatingGroup(false);
+  };
   // Sort admins by last message timestamp (latest on top)
   const sortedAdmins = [...admins].sort((a, b) => {
     // Backend sends timestamp in socket events (mapped from createdAt)
@@ -119,6 +128,7 @@ export default function Dashboard() {
   return (
     <div className="chat-app-container">
       <Sidebar
+        groups={groups}
         admins={sortedAdmins}
         loading={loading}
         onSelectAdmin={handleSelectAdmin}
@@ -128,9 +138,17 @@ export default function Dashboard() {
         onSendResetLink={handleSendResetLink}
         unreadCounts={unreadCounts}
         lastMessages={lastMessages}
+        handleGroupClick={handleGroupClick}
       />
 
-      {selectedAdmin ? (
+      {isCreatingGroup ? (
+        <NewGroup
+          admins={admins}
+          onClose={handleCloseGroupCreator}
+          socket={socket}
+          user={user}
+        />
+      ) : selectedAdmin ? (
         <ChatPanel
           user={user}
           admin={selectedAdmin}

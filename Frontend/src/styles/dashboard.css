@@ -189,6 +189,8 @@
   padding: 10px;
   text-align: center;
   border-bottom: 1px solid #ddd;
+  display: flex;
+  justify-content: space-around;
 }
 .chath {
   font-size: 20px;
@@ -469,4 +471,24 @@
 .received .file-link {
   background-color: #fff;
   color: #075e54;
+}
+
+.new-group-btn {
+  background-color: #4f46e5;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  padding: 5px;
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  transition: background 0.3s, transform 0.2s;
+}
+
+.new-group-btn:hover {
+  background-color: #4338ca;
+  transform: translateY(-2px);
 }

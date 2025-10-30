@@ -16,7 +16,21 @@ export const getMe = async (req, res) => {
       "-password"
     );
 
-    res.json({ adminLogin, allAdmins });
+    // ✅ Fetch all groups that the logged-in user is part of
+    const groups = await Conversation.find({
+      isGroup: true,
+      participants: req.user.id,
+    })
+      .populate("participants", "name email avatar")
+      .populate("admins", "name email avatar")
+      .populate("createdBy", "name email avatar")
+      .sort({ updatedAt: -1 });
+
+    res.json({
+      adminLogin,
+      allAdmins,
+      groups, // 👈 include groups in same response
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -279,5 +293,34 @@ export const resetPassword = async (req, res) => {
       return res.status(400).json({ message: "Token has expired" });
     }
     res.status(400).json({ message: "Invalid token" });
+  }
+};
+
+export const createGroup = async (req, res) => {
+  try {
+    const { name, members, createdBy } = req.body;
+
+    if (!name || !members || members.length < 2) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid group data" });
+    }
+
+    // Create new group conversation
+    const group = await Conversation.create({
+      isGroup: true,
+      groupName: name,
+      participants: members,
+      groupAvatar: "", // Can be set later
+      createdBy,
+      admins: [createdBy],
+    });
+
+    res.status(201).json({ success: true, group });
+  } catch (error) {
+    console.error("Group creation error:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to create group", error });
   }
 };

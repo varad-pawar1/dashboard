@@ -49,6 +49,7 @@ export default function adminReducer(state = initialState, action) {
         loading: false,
         user: action.payload.user,
         admins: action.payload.admins,
+        groups: action.payload.groups,
         error: null,
       };
 

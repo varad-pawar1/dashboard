@@ -11,11 +11,16 @@ export function Sidebar({
   onSendResetLink,
   unreadCounts,
   lastMessages,
+  handleGroupClick,
+  groups,
 }) {
   return (
     <div className="sidebar">
       <div className="sidebar-heading">
         <p className="chath">Chat</p>
+        <button className="new-group-btn" onClick={handleGroupClick}>
+          <i className="fa-solid fa-plus"></i> New Group
+        </button>
       </div>
 
       <div className="sidebar-chats">
