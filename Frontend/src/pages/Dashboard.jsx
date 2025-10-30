@@ -107,7 +107,6 @@ export default function Dashboard() {
       console.error(err.message || err);
     }
   };
-
   const handleGroupClick = () => {
     setIsCreatingGroup(true);
     setSelectedAdmin(null);
@@ -125,6 +124,7 @@ export default function Dashboard() {
       lastMessages[b._id]?.timestamp || lastMessages[b._id]?.createdAt || 0;
     return new Date(timeB) - new Date(timeA);
   });
+
   return (
     <div className="chat-app-container">
       <Sidebar
