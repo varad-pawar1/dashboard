@@ -22,7 +22,6 @@ export function Sidebar({
           <i className="fa-solid fa-plus"></i> New Group
         </button>
       </div>
-
       <div className="sidebar-chats">
         {loading ? (
           <p>Loading admins...</p>
