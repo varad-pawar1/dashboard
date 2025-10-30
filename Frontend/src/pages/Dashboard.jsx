@@ -88,10 +88,15 @@ export default function Dashboard() {
     dispatch(fetchDashboardData()).catch(() => navigate("/login"));
   }, [dispatch, navigate]);
 
-  const handleSelectAdmin = (admin) => {
-    setSelectedAdmin(admin);
-    setUnreadCounts((prev) => ({ ...prev, [admin._id]: 0 }));
-    socket.emit("markAsRead", { userId: user._id, otherUserId: admin._id });
+  const handleSelectAdmin = (chat) => {
+    setSelectedAdmin(chat);
+    setUnreadCounts((prev) => ({ ...prev, [chat._id]: 0 }));
+
+    socket.emit("markAsRead", {
+      userId: user._id,
+      otherUserId: chat._id,
+      isGroup: chat.isGroup,
+    });
   };
 
   const handleLogout = () => {
@@ -114,10 +119,14 @@ export default function Dashboard() {
   const handleCloseGroupCreator = () => {
     setIsCreatingGroup(false);
   };
-  // Sort admins by last message timestamp (latest on top)
-  const sortedAdmins = [...admins].sort((a, b) => {
-    // Backend sends timestamp in socket events (mapped from createdAt)
-    // Fallback to createdAt if timestamp doesn't exist for compatibility
+  // Combine groups and admins into one array
+  const combinedChats = [
+    ...admins.map((a) => ({ ...a, isGroup: false })),
+    ...groups.map((g) => ({ ...g, isGroup: true })),
+  ];
+
+  // Sort by last message timestamp (newest first)
+  const sortedChats = combinedChats.sort((a, b) => {
     const timeA =
       lastMessages[a._id]?.timestamp || lastMessages[a._id]?.createdAt || 0;
     const timeB =
@@ -128,11 +137,10 @@ export default function Dashboard() {
   return (
     <div className="chat-app-container">
       <Sidebar
-        groups={groups}
-        admins={sortedAdmins}
+        chats={sortedChats}
         loading={loading}
-        onSelectAdmin={handleSelectAdmin}
-        selectedAdmin={selectedAdmin}
+        onSelectChat={handleSelectAdmin}
+        selectedChat={selectedAdmin}
         user={user}
         onLogout={handleLogout}
         onSendResetLink={handleSendResetLink}

@@ -16,7 +16,6 @@ export const getMe = async (req, res) => {
       "-password"
     );
 
-    // ✅ Fetch all groups that the logged-in user is part of
     const groups = await Conversation.find({
       isGroup: true,
       participants: req.user.id,
@@ -24,12 +23,13 @@ export const getMe = async (req, res) => {
       .populate("participants", "name email avatar")
       .populate("admins", "name email avatar")
       .populate("createdBy", "name email avatar")
-      .sort({ updatedAt: -1 });
+      .sort({ updatedAt: -1 })
+      .lean(); // FIX: returns plain JS objects
 
     res.json({
       adminLogin,
       allAdmins,
-      groups, // 👈 include groups in same response
+      groups, // include groups in same response
     });
   } catch (err) {
     console.error(err);
