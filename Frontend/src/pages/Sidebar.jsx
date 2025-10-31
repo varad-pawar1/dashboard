@@ -30,63 +30,6 @@ export function Sidebar({
         ></i>
       </div>
 
-      {/* Popup section */}
-      {showPopup && (
-        <div className="popup">
-          <div className="popup-header">
-            <h2>Create</h2>
-            <i
-              className="fa-solid fa-xmark close-icon"
-              onClick={closePopup}
-              style={{ cursor: "pointer", fontSize: "20px" }}
-            ></i>
-          </div>
-
-          <button
-            className="new-group-btn"
-            onClick={() => {
-              handleGroupClick();
-              closePopup();
-            }}
-          >
-            <i className="fa-solid fa-plus"></i> New Group
-          </button>
-
-          <div className="sidebar-chats">
-            {loading ? (
-              <p>Loading chats...</p>
-            ) : chats.length > 0 ? (
-              chats.map((chat) => {
-                const isGroup = chat.isGroup;
-                return (
-                  <div
-                    key={chat._id}
-                    className={`chat-user-item ${
-                      selectedChat?._id === chat._id ? "active" : ""
-                    }`}
-                    onClick={() => onSelectChat(chat)}
-                  >
-                    <div className="chat-user-avatar">
-                      {isGroup
-                        ? chat.groupName.charAt(0).toUpperCase()
-                        : chat.name.charAt(0).toUpperCase()}
-                    </div>
-
-                    <div className="chat-user-info">
-                      <p className="chat-user-name">
-                        {isGroup ? chat.groupName : chat.name}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <p>No chats found</p>
-            )}
-          </div>
-        </div>
-      )}
-
       <div className="conversation">
         <div className="conversation-header">
           <p className="chath">Conversations</p>
@@ -96,39 +39,72 @@ export function Sidebar({
           {loading ? (
             <p>Loading chats...</p>
           ) : usersWithConversations && usersWithConversations.length > 0 ? (
-            usersWithConversations.map((chat) => {
-              const isGroup = chat.isGroup;
-              const lastMsg = lastMessages[chat._id];
-              let lastText = lastMsg
-                ? lastMsg.text || lastMsg.fileType || ""
-                : "";
+            usersWithConversations.map((conv) => {
+              const isGroup = conv.isGroup;
+              // Determine the other user for private chats
+              const otherUser = !isGroup
+                ? Array.isArray(conv.participants)
+                  ? conv.participants.find((p) => String(p?._id || p) !== String(user._id))
+                  : null
+                : null;
 
-              if (lastText.length > 25) {
+              const otherUserId = isGroup
+                ? String(conv._id)
+                : String(otherUser?._id || otherUser || "");
+              const displayName = isGroup
+                ? conv.groupName
+                : otherUser?.name || "Unknown User";
+
+              const lastKey = isGroup ? String(conv._id) : otherUserId;
+              const lastMsg = lastMessages[lastKey];
+              // Fallback to conversation.lastMessage if socket not ready
+              const fallbackLast = conv.lastMessage
+                ? {
+                    text: conv.lastMessage.fileUrl
+                      ? conv.lastMessage.fileType === "image"
+                        ? "📷 Image"
+                        : conv.lastMessage.fileType === "video"
+                        ? "🎥 Video"
+                        : "📎 File"
+                      : conv.lastMessage.message,
+                    timestamp: conv.lastMessage.createdAt,
+                  }
+                : null;
+              const effectiveLast = lastMsg || fallbackLast;
+              let lastText = effectiveLast ? effectiveLast.text || "" : "";
+              if (lastText.length > 25)
                 lastText = lastText.substring(0, 25) + "...";
-              }
+
+              const isActive = selectedChat?.conversationId === conv._id;
+
               return (
                 <div
-                  key={chat._id}
-                  className={`chat-user-item ${
-                    selectedChat?._id === chat._id ? "active" : ""
-                  }`}
-                  onClick={() => onSelectChat(chat)}
+                  key={conv._id}
+                  className={`chat-user-item ${isActive ? "active" : ""}`}
+                  onClick={() =>
+                    onSelectChat({
+                      conversationId: conv._id,
+                      isGroup,
+                      otherUserId: isGroup ? null : otherUserId,
+                      name: displayName,
+                    })
+                  }
                 >
                   <div className="chat-user-avatar">
-                    {isGroup ? chat.groupName.charAt(0).toUpperCase() : "V"}
+                    {isGroup
+                      ? (conv.groupName || "G").charAt(0).toUpperCase()
+                      : (displayName || "U").charAt(0).toUpperCase()}
                   </div>
 
                   <div className="chat-user-info">
-                    <p className="chat-user-name">
-                      {isGroup ? chat.groupName : chat.name}
-                    </p>
+                    <p className="chat-user-name">{displayName}</p>
                     <span className="chat-user-last">{lastText}</span>
                   </div>
-                  {unreadCounts[chat._id] > 0 && (
+                  {Number(unreadCounts[lastKey] || 0) > 0 && (
                     <div className="unread-badge">
-                      {unreadCounts[chat._id] > 99
+                      {Number(unreadCounts[lastKey]) > 99
                         ? "99+"
-                        : unreadCounts[chat._id]}
+                        : Number(unreadCounts[lastKey])}
                     </div>
                   )}
                 </div>

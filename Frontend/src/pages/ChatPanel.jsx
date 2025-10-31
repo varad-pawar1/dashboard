@@ -1,10 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
-import { io } from "socket.io-client";
 import APIADMIN from "../api/admin";
 
-let socket;
-
-export default function ChatPanel({ user, admin, onClose }) {
+export default function ChatPanel({ user, admin, socket, onClose }) {
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState("");
   const [editingMessageId, setEditingMessageId] = useState(null);
@@ -16,15 +13,16 @@ export default function ChatPanel({ user, admin, onClose }) {
   const inputRef = useRef();
   const fileInputRef = useRef();
   const imageVideoInputRef = useRef();
-  const roomId = [user._id, admin._id].sort().join("-");
+  const roomId = admin.isGroup
+    ? `group-${admin.conversationId}`
+    : [user._id, admin.otherUserId].sort().join("-");
 
-  // 🔌 SOCKET INIT
+  // 🔌 SOCKET INIT (reuse shared socket)
   useEffect(() => {
     setInputValue("");
-    socket = io(`${import.meta.env.VITE_BACKEND_URL}`);
-    socket.emit("joinRoom", roomId);
+    socket?.emit("joinRoom", roomId);
     // Fetch chat history
-    APIADMIN.get(`/chats/${admin._id}`)
+    APIADMIN.get(`/chats/${admin.conversationId}`)
       .then((res) => {
         const normalized = res.data.map((msg) => ({
           ...msg,
@@ -33,16 +31,18 @@ export default function ChatPanel({ user, admin, onClose }) {
           timestamp: msg.createdAt || msg.timestamp,
         }));
         setMessages(normalized);
-        socket.emit("markAsRead", {
-          userId: user._id,
-          otherUserId: admin._id,
-        });
+        if (!admin.isGroup && admin.otherUserId) {
+          socket?.emit("markAsRead", {
+            userId: user._id,
+            otherUserId: admin.otherUserId,
+          });
+        }
       })
       .catch(console.error);
 
     inputRef.current?.focus();
 
-    socket.on("receiveMessage", (msg) => {
+    const onReceive = (msg) => {
       const normalizedMsg = {
         ...msg,
         sender: msg.sender?._id || msg.sender,
@@ -55,15 +55,16 @@ export default function ChatPanel({ user, admin, onClose }) {
           : [...prev, normalizedMsg]
       );
 
-      if (normalizedMsg.sender !== user._id) {
-        socket.emit("markAsRead", {
+      if (!admin.isGroup && normalizedMsg.sender !== user._id && admin.otherUserId) {
+        socket?.emit("markAsRead", {
           userId: user._id,
-          otherUserId: admin._id,
+          otherUserId: admin.otherUserId,
         });
       }
-    });
+    };
+    socket?.on("receiveMessage", onReceive);
 
-    socket.on("updateMessage", (updatedMsg) => {
+    const onUpdate = (updatedMsg) => {
       const normalized = {
         ...updatedMsg,
         sender: updatedMsg.sender?._id || updatedMsg.sender,
@@ -80,9 +81,10 @@ export default function ChatPanel({ user, admin, onClose }) {
         setInputValue("");
       }
       setMenuVisibleId(null);
-    });
+    };
+    socket?.on("updateMessage", onUpdate);
 
-    socket.on("deleteMessage", (msgId) => {
+    const onDelete = (msgId) => {
       setMessages((prev) =>
         prev.filter((m) => String(m._id) !== String(msgId))
       );
@@ -91,15 +93,15 @@ export default function ChatPanel({ user, admin, onClose }) {
         setInputValue("");
       }
       setMenuVisibleId(null);
-    });
+    };
+    socket?.on("deleteMessage", onDelete);
 
     return () => {
-      socket.off("receiveMessage");
-      socket.off("updateMessage");
-      socket.off("deleteMessage");
-      socket.disconnect();
+      socket?.off("receiveMessage", onReceive);
+      socket?.off("updateMessage", onUpdate);
+      socket?.off("deleteMessage", onDelete);
     };
-  }, [user._id, admin._id]);
+  }, [user._id, admin.conversationId, admin.otherUserId]);
 
   // Auto-scroll
   useEffect(() => {
@@ -118,10 +120,10 @@ export default function ChatPanel({ user, admin, onClose }) {
           message: inputValue,
         });
         const updatedMsg = res.data;
-        socket.emit("updateMessage", {
+        socket?.emit("updateMessage", {
           ...updatedMsg,
           sender: user._id,
-          receiver: admin._id,
+          receiver: admin.otherUserId,
         });
         setEditingMessageId(null);
         setInputValue("");
@@ -129,12 +131,20 @@ export default function ChatPanel({ user, admin, onClose }) {
         console.error(err);
       }
     } else {
-      const msgObj = {
-        sender: user._id,
-        receiver: admin._id,
-        message: inputValue,
-      };
-      socket.emit("sendMessage", msgObj);
+      if (admin.isGroup) {
+        socket?.emit("sendGroupMessage", {
+          conversationId: admin.conversationId,
+          sender: user._id,
+          message: inputValue,
+        });
+      } else {
+        const msgObj = {
+          sender: user._id,
+          receiver: admin.otherUserId,
+          message: inputValue,
+        };
+        socket?.emit("sendMessage", msgObj);
+      }
       setInputValue("");
     }
   };
@@ -143,10 +153,10 @@ export default function ChatPanel({ user, admin, onClose }) {
   const handleDelete = async (msgId) => {
     try {
       await APIADMIN.delete(`/chats/${msgId}`);
-      socket.emit("notifyDelete", {
+      socket?.emit("notifyDelete", {
         _id: msgId,
         sender: user._id,
-        receiver: admin._id,
+        receiver: admin.otherUserId,
       });
       setMessages((prev) =>
         prev.filter((m) => String(m._id) !== String(msgId))
@@ -206,7 +216,11 @@ export default function ChatPanel({ user, admin, onClose }) {
       const formData = new FormData();
       formData.append("file", selectedFile);
       formData.append("sender", user._id);
-      formData.append("receiver", admin._id);
+      if (admin.isGroup) {
+        formData.append("conversationId", admin.conversationId);
+      } else {
+        formData.append("receiver", admin.otherUserId);
+      }
 
       // Upload file to backend
       const res = await APIADMIN.post("/chats/upload", formData, {
@@ -219,7 +233,9 @@ export default function ChatPanel({ user, admin, onClose }) {
       const uploadedMessage = res.data;
 
       // The backend already saved it, we just notify the room
-      const roomId = [user._id, admin._id].sort().join("-");
+      const roomId = admin.isGroup
+        ? `group-${admin.conversationId}`
+        : [user._id, admin.otherUserId].sort().join("-");
 
       // Normalize uploaded message for socket emission
       const normalizedUploadedMsg = {
@@ -233,7 +249,14 @@ export default function ChatPanel({ user, admin, onClose }) {
       };
 
       // Notify the room about the new file message
-      socket.emit("sendMessage", normalizedUploadedMsg);
+      if (admin.isGroup) {
+        socket?.emit("sendGroupMessage", {
+          ...normalizedUploadedMsg,
+          conversationId: admin.conversationId,
+        });
+      } else {
+        socket?.emit("sendMessage", normalizedUploadedMsg);
+      }
 
       // Clear preview and reset states
       setPreview(null);

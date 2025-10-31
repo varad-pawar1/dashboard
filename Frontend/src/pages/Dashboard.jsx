@@ -83,6 +83,23 @@ export default function Dashboard() {
       }));
     });
 
+    // Group-specific events
+    socket.on("incrementGroupUnread", ({ conversationId }) => {
+      setUnreadCounts((prev) => ({
+        ...prev,
+        [conversationId]: (prev[conversationId] || 0) + 1,
+      }));
+    });
+    socket.on("resetGroupUnread", ({ conversationId }) => {
+      setUnreadCounts((prev) => ({ ...prev, [conversationId]: 0 }));
+    });
+    socket.on("updateGroupLastMessage", ({ conversationId, lastMessage }) => {
+      setLastMessages((prev) => ({
+        ...prev,
+        [conversationId]: lastMessage || null,
+      }));
+    });
+
     return () => socket.disconnect();
   }, [user]);
 
@@ -90,10 +107,16 @@ export default function Dashboard() {
     dispatch(fetchDashboardData()).catch(() => navigate("/login"));
   }, [dispatch, navigate]);
 
-  const handleSelectAdmin = (admin) => {
-    setSelectedAdmin(admin);
-    setUnreadCounts((prev) => ({ ...prev, [admin._id]: 0 }));
-    socket.emit("markAsRead", { userId: user._id, otherUserId: admin._id });
+  const handleSelectAdmin = (selection) => {
+    setSelectedAdmin(selection);
+    // Reset unread counts based on keying
+    const key = selection.isGroup ? selection.conversationId : selection.otherUserId;
+    setUnreadCounts((prev) => ({ ...prev, [key]: 0 }));
+    if (!selection.isGroup && selection.otherUserId) {
+      socket.emit("markAsRead", { userId: user._id, otherUserId: selection.otherUserId });
+    } else if (selection.isGroup && selection.conversationId) {
+      socket.emit("markGroupAsRead", { userId: user._id, conversationId: selection.conversationId });
+    }
   };
 
   const handleLogout = () => {

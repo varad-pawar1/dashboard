@@ -19,8 +19,8 @@ router.get("/me", protect, getMe);
 router.post("/send-reset-link", protect, sendResetLink);
 router.post("/reset-password/:token", resetPassword);
 router.post("/create-group", protect, createGroup);
-// Chat history
-router.get("/chats/:adminId", protect, chatUser);
+// Chat history by conversation id
+router.get("/chats/:c_id", protect, chatUser);
 router.put("/chats/:id", protect, updateMessage);
 router.delete("/chats/:id", protect, deleteMessage);
 

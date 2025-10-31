@@ -45,35 +45,60 @@ io.on("connection", (socket) => {
       const lastMessages = {};
 
       for (const conv of conversations) {
-        const otherUser = conv.participants.find(
-          (p) => p.toString() !== userId
-        );
+        if (conv.isGroup) {
+          const unreadMsgs = await Message.countDocuments({
+            conversationId: conv._id,
+            sender: { $ne: userId },
+            readBy: { $ne: userId },
+          });
+          unreadCounts[conv._id.toString()] = unreadMsgs;
 
-        // Count unread messages (messages not sent by user and not read by user)
-        const unreadMsgs = await Message.countDocuments({
-          conversationId: conv._id,
-          sender: { $ne: userId },
-          readBy: { $ne: userId },
-        });
-        unreadCounts[otherUser] = unreadMsgs;
+          if (conv.lastMessage) {
+            const lastMsg = await Message.findById(conv.lastMessage)
+              .populate("sender", "name email")
+              .select("message sender createdAt fileUrl fileType");
+            if (lastMsg) {
+              lastMessages[conv._id.toString()] = {
+                text: lastMsg.fileUrl
+                  ? lastMsg.fileType === "image"
+                    ? "📷 Image"
+                    : lastMsg.fileType === "video"
+                    ? "🎥 Video"
+                    : "📎 File"
+                  : lastMsg.message,
+                sender: lastMsg.sender._id || lastMsg.sender,
+                timestamp: lastMsg.createdAt,
+              };
+            }
+          }
+        } else {
+          const otherUser = conv.participants.find(
+            (p) => p.toString() !== userId
+          );
+          const unreadMsgs = await Message.countDocuments({
+            conversationId: conv._id,
+            sender: { $ne: userId },
+            readBy: { $ne: userId },
+          });
+          unreadCounts[otherUser] = unreadMsgs;
 
-        // Get last message (if any)
-        if (conv.lastMessage) {
-          const lastMsg = await Message.findById(conv.lastMessage)
-            .populate("sender", "name email")
-            .select("message sender createdAt fileUrl fileType");
-          if (lastMsg) {
-            lastMessages[otherUser] = {
-              text: lastMsg.fileUrl
-                ? lastMsg.fileType === "image"
-                  ? "📷 Image"
-                  : lastMsg.fileType === "video"
-                  ? "🎥 Video"
-                  : "📎 File"
-                : lastMsg.message,
-              sender: lastMsg.sender._id || lastMsg.sender,
-              timestamp: lastMsg.createdAt,
-            };
+          if (conv.lastMessage) {
+            const lastMsg = await Message.findById(conv.lastMessage)
+              .populate("sender", "name email")
+              .select("message sender createdAt fileUrl fileType");
+            if (lastMsg) {
+              lastMessages[otherUser] = {
+                text: lastMsg.fileUrl
+                  ? lastMsg.fileType === "image"
+                    ? "📷 Image"
+                    : lastMsg.fileType === "video"
+                    ? "🎥 Video"
+                    : "📎 File"
+                  : lastMsg.message,
+                sender: lastMsg.sender._id || lastMsg.sender,
+                timestamp: lastMsg.createdAt,
+              };
+            }
           }
         }
       }
@@ -150,6 +175,70 @@ io.on("connection", (socket) => {
       });
     } catch (err) {
       console.error("Error sending message:", err);
+    }
+  });
+
+  // Group: send message
+  socket.on("sendGroupMessage", async (data) => {
+    try {
+      const { conversationId, sender, message, _skipSave, fileUrl, fileType } = data;
+      const conversation = await Conversation.findById(conversationId);
+      if (!conversation || !conversation.isGroup) return;
+      if (!conversation.participants.map(String).includes(String(sender))) return;
+
+      let savedMsg;
+      if (_skipSave) {
+        savedMsg = data;
+      } else {
+        savedMsg = await new Message({
+          conversationId,
+          sender,
+          message,
+          fileUrl: fileUrl || undefined,
+          fileType: fileUrl ? fileType : undefined,
+          readBy: [],
+        }).save();
+      }
+
+      // Update last message pointer
+      const lastMsgDoc = fileUrl || message ? savedMsg : await Message.findOne({ conversationId }).sort({ createdAt: -1 });
+      if (lastMsgDoc) {
+        conversation.lastMessage = lastMsgDoc._id;
+        conversation.updatedAt = new Date();
+        await conversation.save();
+      }
+
+      // Broadcast to group room
+      io.to(`group-${conversationId}`).emit("receiveMessage", savedMsg);
+
+      // Unread for all except sender
+      for (const participant of conversation.participants) {
+        const pid = participant.toString();
+        if (pid === String(sender)) continue;
+        io.to(pid).emit("incrementGroupUnread", { conversationId });
+      }
+
+      // Last message preview
+      const lastMessageText = savedMsg.fileUrl
+        ? savedMsg.fileType === "image"
+          ? "📷 Image"
+          : savedMsg.fileType === "video"
+          ? "🎥 Video"
+          : "📎 File"
+        : savedMsg.message || message;
+
+      for (const participant of conversation.participants) {
+        io.to(participant.toString()).emit("updateGroupLastMessage", {
+          conversationId: conversationId.toString(),
+          lastMessage: {
+            text: lastMessageText,
+            sender,
+            timestamp: savedMsg.createdAt || new Date(),
+          },
+        });
+      }
+    } catch (err) {
+      console.error("Error sending group message:", err);
     }
   });
 
@@ -329,6 +418,27 @@ io.on("connection", (socket) => {
       }
     } catch (err) {
       console.error("markAsRead socket error:", err);
+    }
+  });
+
+  // Group: mark as read
+  socket.on("markGroupAsRead", async ({ userId, conversationId }) => {
+    try {
+      const conversation = await Conversation.findById(conversationId);
+      if (!conversation) return;
+      const result = await Message.updateMany(
+        {
+          conversationId: conversation._id,
+          sender: { $ne: userId },
+          readBy: { $ne: userId },
+        },
+        { $addToSet: { readBy: userId } }
+      );
+      if (result.modifiedCount > 0) {
+        io.to(userId).emit("resetGroupUnread", { conversationId });
+      }
+    } catch (err) {
+      console.error("markGroupAsRead socket error:", err);
     }
   });
 
