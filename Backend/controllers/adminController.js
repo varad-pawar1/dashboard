@@ -41,13 +41,30 @@ export const getMe = async (req, res) => {
 export const chatUser = async (req, res) => {
   const { userId, adminId } = req.params;
   try {
+    const treatAsGroup = String(req.query.isGroup) === "true";
+    // Only when explicitly requested as group
+    if (treatAsGroup) {
+      const groupConv = await Conversation.findById(adminId).lean();
+      if (!groupConv || !groupConv.isGroup) {
+        return res.status(404).json({ message: "Group not found" });
+      }
+      if (!groupConv.participants.map(String).includes(String(userId))) {
+        return res.status(403).json({ message: "No access to this group" });
+      }
+      const messages = await Message.find({ conversationId: adminId })
+        .sort({ createdAt: 1 })
+        .populate("sender", "name email")
+        .populate("readBy", "name email");
+      return res.json(messages);
+    }
+
+    // Fallback to 1:1 conversation by participants
     const conversation = await Conversation.findOne({
       participants: { $all: [userId, adminId] },
     });
 
     if (!conversation) return res.json([]);
 
-    // Fetch messages for this conversation
     const messages = await Message.find({ conversationId: conversation._id })
       .sort({ createdAt: 1 })
       .populate("sender", "name email")
@@ -62,18 +79,22 @@ export const chatUser = async (req, res) => {
 
 export const saveMessage = async ({ sender, receiver, message }) => {
   try {
-    // Sort IDs to ensure one conversation per pair
-    const participants = [sender, receiver].sort();
-
-    // Try to find existing conversation
-    let conversation = await Conversation.findOne({ participants });
-
-    if (!conversation) {
-      // If no conversation exists, create one
-      conversation = new Conversation({
-        participants,
-      });
-      await conversation.save();
+    // If receiver is a Group Conversation id, use it directly
+    let conversation = null;
+    const maybeGroup = await Conversation.findById(receiver);
+    if (maybeGroup && maybeGroup.isGroup) {
+      if (!maybeGroup.participants.map(String).includes(String(sender))) {
+        throw new Error("Sender not in group");
+      }
+      conversation = maybeGroup;
+    } else {
+      // 1:1 flow: Sort IDs to ensure one conversation per pair
+      const participants = [sender, receiver].sort();
+      conversation = await Conversation.findOne({ participants });
+      if (!conversation) {
+        conversation = new Conversation({ participants });
+        await conversation.save();
+      }
     }
 
     // Create new message in Message collection
@@ -195,15 +216,15 @@ export const uploadFileMessage = async (req, res) => {
     const fileUrl = file.path;
     const fileType = detectFileType(file.originalname);
 
-    const participants = [sender, receiver].sort();
-
-    let conversation = await Conversation.findOne({ participants });
-
-    if (!conversation) {
-      conversation = new Conversation({
-        participants,
-      });
-      await conversation.save();
+    // Allow group uploads by passing group conversation id as receiver
+    let conversation = await Conversation.findById(receiver);
+    if (!(conversation && conversation.isGroup)) {
+      const participants = [sender, receiver].sort();
+      conversation = await Conversation.findOne({ participants });
+      if (!conversation) {
+        conversation = new Conversation({ participants });
+        await conversation.save();
+      }
     }
 
     // Create new message in Message collection

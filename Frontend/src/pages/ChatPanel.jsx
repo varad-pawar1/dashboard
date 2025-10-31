@@ -16,7 +16,10 @@ export default function ChatPanel({ user, admin, onClose }) {
   const inputRef = useRef();
   const fileInputRef = useRef();
   const imageVideoInputRef = useRef();
-  const roomId = [user._id, admin._id].sort().join("-");
+  const isGroup = Boolean(admin?.isGroup);
+  const roomId = isGroup
+    ? String(admin._id)
+    : [user._id, admin._id].sort().join("-");
 
   // 🔌 SOCKET INIT
   useEffect(() => {
@@ -24,8 +27,8 @@ export default function ChatPanel({ user, admin, onClose }) {
     socket = io(`${import.meta.env.VITE_BACKEND_URL}`);
     socket.emit("joinRoom", roomId);
 
-    // Fetch chat history
-    APIADMIN.get(`/chats/${user._id}/${admin._id}`)
+    // Fetch chat history (explicitly mark group via query when needed)
+    APIADMIN.get(`/chats/${user._id}/${admin._id}${isGroup ? `?isGroup=true` : ``}`)
       .then((res) => {
         const normalized = res.data.map((msg) => ({
           ...msg,
@@ -39,6 +42,7 @@ export default function ChatPanel({ user, admin, onClose }) {
         socket.emit("markAsRead", {
           userId: user._id,
           otherUserId: admin._id,
+          isGroup,
         });
       })
       .catch(console.error);
@@ -62,6 +66,7 @@ export default function ChatPanel({ user, admin, onClose }) {
         socket.emit("markAsRead", {
           userId: user._id,
           otherUserId: admin._id,
+          isGroup,
         });
       }
     });
@@ -285,7 +290,7 @@ export default function ChatPanel({ user, admin, onClose }) {
     <div className="chat-panel-backdrop">
       <div className="chat-panel" onClick={(e) => e.stopPropagation()}>
         <div className="chat-header">
-          <span>{admin.name}</span>
+          <span>{isGroup ? admin.groupName : admin.name}</span>
           <button className="close-btn" onClick={onClose}>
             <i className="fa-solid fa-circle-xmark"></i>
           </button>

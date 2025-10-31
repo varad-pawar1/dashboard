@@ -45,25 +45,22 @@ io.on("connection", (socket) => {
       const lastMessages = {};
 
       for (const conv of conversations) {
-        const otherUser = conv.participants.find(
-          (p) => p.toString() !== userId
-        );
-
-        // Count unread messages (messages not sent by user and not read by user)
+        const key = conv.isGroup
+          ? conv._id.toString()
+          : (conv.participants.find((p) => p.toString() !== userId) || "").toString();
+        if (!key) continue;
         const unreadMsgs = await Message.countDocuments({
           conversationId: conv._id,
           sender: { $ne: userId },
           readBy: { $ne: userId },
         });
-        unreadCounts[otherUser] = unreadMsgs;
-
-        // Get last message (if any)
+        unreadCounts[key] = unreadMsgs;
         if (conv.lastMessage) {
           const lastMsg = await Message.findById(conv.lastMessage)
             .populate("sender", "name email")
             .select("message sender createdAt fileUrl fileType");
           if (lastMsg) {
-            lastMessages[otherUser] = {
+            lastMessages[key] = {
               text: lastMsg.fileUrl
                 ? lastMsg.fileType === "image"
                   ? "📷 Image"
@@ -100,54 +97,101 @@ io.on("connection", (socket) => {
       let savedMsg;
 
       // If _skipSave flag exists, it means the message is already saved
-      // Just broadcast it without saving again
       if (_skipSave) {
         savedMsg = data; // Use the data as-is (already from DB)
       } else {
-        // Normal text message flow - save to database
+        // Save to database (works for 1:1 and group when receiver is group id)
         savedMsg = await saveMessage({ sender, receiver, message });
       }
-
-      const roomId = getRoomId(sender, receiver);
-
-      // Make sure both sender & receiver are in the same room
-      socket.join(roomId);
-
-      // Send message to BOTH users in that room
-      io.to(roomId).emit("receiveMessage", savedMsg);
-
-      // Increase unread count for receiver only
-      if (sender !== receiver) {
-        io.to(receiver).emit("incrementUnread", { sender });
+      
+      // Determine if this is a group message
+      const maybeGroup = await Conversation.findById(receiver).select("isGroup participants");
+      if (maybeGroup && maybeGroup.isGroup) {
+        const roomId = receiver.toString();
+        socket.join(roomId);
+        io.to(roomId).emit("receiveMessage", savedMsg);
+        // Update last message for all participants
+        const lastMessageText = savedMsg.fileUrl
+          ? savedMsg.fileType === "image"
+            ? "📷 Image"
+            : savedMsg.fileType === "video"
+            ? "🎥 Video"
+            : "📎 File"
+          : savedMsg.message || message;
+        for (const p of maybeGroup.participants) {
+          io.to(p.toString()).emit("updateLastMessage", {
+            otherUserId: roomId,
+            lastMessage: {
+              text: lastMessageText,
+              sender: savedMsg.sender._id || savedMsg.sender,
+              timestamp: savedMsg.createdAt || new Date(),
+            },
+          });
+          if (p.toString() !== sender) {
+            io.to(p.toString()).emit("incrementUnread", { sender: roomId });
+          }
+        }
+      } else {
+        const roomId = getRoomId(sender, receiver);
+        socket.join(roomId);
+        io.to(roomId).emit("receiveMessage", savedMsg);
+        if (sender !== receiver) {
+          io.to(receiver).emit("incrementUnread", { sender });
+        }
+        const lastMessageText = savedMsg.fileUrl
+          ? savedMsg.fileType === "image"
+            ? "📷 Image"
+            : savedMsg.fileType === "video"
+            ? "🎥 Video"
+            : "📎 File"
+          : savedMsg.message || message;
+        io.to(sender).emit("updateLastMessage", {
+          otherUserId: receiver,
+          lastMessage: {
+            text: lastMessageText,
+            sender,
+            timestamp: savedMsg.createdAt || new Date(),
+          },
+        });
+        io.to(receiver).emit("updateLastMessage", {
+          otherUserId: sender,
+          lastMessage: {
+            text: lastMessageText,
+            sender,
+            timestamp: savedMsg.createdAt || new Date(),
+          },
+        });
       }
 
-      // Determine last message text for sidebar
-      const lastMessageText = savedMsg.fileUrl
-        ? savedMsg.fileType === "image"
-          ? "📷 Image"
-          : savedMsg.fileType === "video"
-          ? "🎥 Video"
-          : "📎 File"
-        : savedMsg.message || message;
+      // For 1:1, also emit last-message updates directly to the two users (group handled above)
+      const maybeGroup2 = await Conversation.findById(receiver).select("isGroup");
+      if (!(maybeGroup2 && maybeGroup2.isGroup)) {
+        const lastMessageText = savedMsg.fileUrl
+          ? savedMsg.fileType === "image"
+            ? "📷 Image"
+            : savedMsg.fileType === "video"
+            ? "🎥 Video"
+            : "📎 File"
+          : savedMsg.message || message;
 
-      // Update sidebar of both users with the new last message
-      io.to(sender).emit("updateLastMessage", {
-        otherUserId: receiver,
-        lastMessage: {
-          text: lastMessageText,
-          sender,
-          timestamp: savedMsg.createdAt || new Date(),
-        },
-      });
+        io.to(sender).emit("updateLastMessage", {
+          otherUserId: receiver,
+          lastMessage: {
+            text: lastMessageText,
+            sender,
+            timestamp: savedMsg.createdAt || new Date(),
+          },
+        });
 
-      io.to(receiver).emit("updateLastMessage", {
-        otherUserId: sender,
-        lastMessage: {
-          text: lastMessageText,
-          sender,
-          timestamp: savedMsg.createdAt || new Date(),
-        },
-      });
+        io.to(receiver).emit("updateLastMessage", {
+          otherUserId: sender,
+          lastMessage: {
+            text: lastMessageText,
+            sender,
+            timestamp: savedMsg.createdAt || new Date(),
+          },
+        });
+      }
     } catch (err) {
       console.error("Error sending message:", err);
     }
@@ -171,26 +215,29 @@ io.on("connection", (socket) => {
         updatedAt: new Date(),
       });
 
-      const roomId = getRoomId(sender, receiver);
+      // group or 1:1 room
+      const maybeGroup = await Conversation.findById(receiver).select("isGroup");
+      const roomId = maybeGroup && maybeGroup.isGroup ? receiver.toString() : getRoomId(sender, receiver);
       io.to(roomId).emit("updateMessage", updatedMessage);
 
       io.to(sender).emit("updateLastMessage", {
-        otherUserId: receiver,
+        otherUserId: (maybeGroup && maybeGroup.isGroup) ? receiver : receiver,
         lastMessage: {
           text: message,
           sender,
           timestamp: updatedMessage.createdAt,
         },
       });
-
-      io.to(receiver).emit("updateLastMessage", {
-        otherUserId: sender,
-        lastMessage: {
-          text: message,
-          sender,
-          timestamp: updatedMessage.createdAt,
-        },
-      });
+      if (!(maybeGroup && maybeGroup.isGroup)) {
+        io.to(receiver).emit("updateLastMessage", {
+          otherUserId: sender,
+          lastMessage: {
+            text: message,
+            sender,
+            timestamp: updatedMessage.createdAt,
+          },
+        });
+      }
     } catch (err) {
       console.error("Error updating message:", err);
     }
@@ -200,12 +247,14 @@ io.on("connection", (socket) => {
   socket.on("notifyDelete", async (data) => {
     try {
       const { _id, sender, receiver } = data;
-      const roomId = getRoomId(sender, receiver);
+      const maybeGroup = await Conversation.findById(receiver).select("isGroup participants");
+      const isGroup = Boolean(maybeGroup && maybeGroup.isGroup);
+      const roomId = isGroup ? receiver.toString() : getRoomId(sender, receiver);
 
-      // Find the conversation first (message might already be deleted from API call)
-      const conversation = await Conversation.findOne({
-        participants: { $all: [sender, receiver] },
-      });
+      // Find the conversation
+      const conversation = isGroup
+        ? maybeGroup
+        : await Conversation.findOne({ participants: { $all: [sender, receiver] } });
 
       if (!conversation) {
         console.error("Conversation not found for delete notification");
@@ -228,9 +277,15 @@ io.on("connection", (socket) => {
       // Always emit delete event to chat room (for UI update)
       io.to(roomId).emit("deleteMessage", _id);
 
-      // Also emit to individual users to ensure they receive it
-      io.to(sender).emit("deleteMessage", _id);
-      io.to(receiver).emit("deleteMessage", _id);
+      // Also emit to individual users/participants to ensure they receive it
+      if (isGroup) {
+        for (const p of conversation.participants) {
+          io.to(p.toString()).emit("deleteMessage", _id);
+        }
+      } else {
+        io.to(sender).emit("deleteMessage", _id);
+        io.to(receiver).emit("deleteMessage", _id);
+      }
 
       // Update conversation's lastMessage if needed
       if (conversation.lastMessage?.toString() === _id) {
@@ -242,7 +297,7 @@ io.on("connection", (socket) => {
       conversation.updatedAt = new Date();
       await conversation.save();
 
-      // Recalculate unread counts for both participants
+      // Recalculate unread counts for participants
       const unreadCounts = {};
       for (const participant of conversation.participants) {
         const unreadMsgs = await Message.countDocuments({
@@ -253,14 +308,14 @@ io.on("connection", (socket) => {
         unreadCounts[participant.toString()] = unreadMsgs;
       }
 
-      //Send updated unread count to each participant
+      //Send updated unread count to each participant (keyed by group id for groups)
       for (const participant of conversation.participants) {
-        const otherUser = conversation.participants.find(
-          (p) => p.toString() !== participant.toString()
-        );
-
+        const otherKey = (maybeGroup && maybeGroup.isGroup)
+          ? conversation._id.toString()
+          : (conversation.participants.find((p) => p.toString() !== participant.toString()) || "").toString();
+        if (!otherKey) continue;
         io.to(participant.toString()).emit("updateUnreadCount", {
-          otherUserId: otherUser.toString(),
+          otherUserId: otherKey,
           count: unreadCounts[participant.toString()],
         });
       }
@@ -285,27 +340,35 @@ io.on("connection", (socket) => {
           }
         : null;
 
-      // Emit to both users to update their sidebars
-      io.to(sender).emit("updateLastMessage", {
-        otherUserId: receiver,
-        lastMessage: lastMessageData,
-      });
-
-      io.to(receiver).emit("updateLastMessage", {
-        otherUserId: sender,
-        lastMessage: lastMessageData,
-      });
+      // Emit last message update
+      if (maybeGroup && maybeGroup.isGroup) {
+        for (const p of conversation.participants) {
+          io.to(p.toString()).emit("updateLastMessage", {
+            otherUserId: conversation._id.toString(),
+            lastMessage: lastMessageData,
+          });
+        }
+      } else {
+        io.to(sender).emit("updateLastMessage", {
+          otherUserId: receiver,
+          lastMessage: lastMessageData,
+        });
+        io.to(receiver).emit("updateLastMessage", {
+          otherUserId: sender,
+          lastMessage: lastMessageData,
+        });
+      }
     } catch (err) {
       console.error("notifyDelete error:", err);
     }
   });
 
   //Mark messages as read (adds unread reset)
-  socket.on("markAsRead", async ({ userId, otherUserId }) => {
+  socket.on("markAsRead", async ({ userId, otherUserId, isGroup }) => {
     try {
-      const conversation = await Conversation.findOne({
-        participants: { $all: [userId, otherUserId] },
-      });
+      const conversation = isGroup
+        ? await Conversation.findById(otherUserId)
+        : await Conversation.findOne({ participants: { $all: [userId, otherUserId] } });
       if (!conversation) return;
 
       // Update all unread messages: add userId to readBy array if not already present
@@ -321,11 +384,9 @@ io.on("connection", (socket) => {
       );
 
       if (result.modifiedCount > 0) {
-        const roomId = [userId, otherUserId].sort().join("-");
+        const roomId = isGroup ? conversation._id.toString() : [userId, otherUserId].sort().join("-");
         io.to(roomId).emit("messagesRead", { readerId: userId });
-
-        //Also reset unread count in receiver's sidebar
-        io.to(userId).emit("resetUnread", { sender: otherUserId });
+        io.to(userId).emit("resetUnread", { sender: isGroup ? conversation._id.toString() : otherUserId });
       }
     } catch (err) {
       console.error("markAsRead socket error:", err);
