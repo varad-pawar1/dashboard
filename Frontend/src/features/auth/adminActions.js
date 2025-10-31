@@ -12,8 +12,7 @@ import {
   RESET_PASSWORD_SUCCESS,
   RESET_PASSWORD_FAILURE,
 } from "./adminReducer";
-
-// ----- Field Actions -----
+// ---- Field Actions ----
 export const setField = (field, value) => ({
   type: SET_FIELD,
   payload: { field, value },
