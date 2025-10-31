@@ -8,47 +8,91 @@ import path from "path";
 import jwt from "jsonwebtoken";
 dotenv.config();
 
-// Get logged-in admin and all other admins
 export const getMe = async (req, res) => {
   try {
+    // Logged-in user info
     const adminLogin = await User.findById(req.user.id).select("-password");
+
+    // All users except the logged-in one
     const allAdmins = await User.find({ _id: { $ne: req.user.id } }).select(
       "-password"
     );
 
+    // Fetch all conversations (both private & group) where user is a participant
+    const conversations = await Conversation.find({
+      participants: { $in: [req.user.id] },
+    })
+      .populate("participants", "name email avatar")
+      .populate("createdBy", "name email")
+      .populate("admins", "name email")
+      .populate("lastMessage")
+      .sort({ updatedAt: -1 }); // latest chats first
+
+    // Optionally filter or map data before sending (if you want minimal info)
+    const usersWithConversations = conversations.map((conv) => ({
+      _id: conv._id,
+      isGroup: conv.isGroup,
+      groupName: conv.groupName || null,
+      groupAvatar: conv.groupAvatar || null,
+      participants: conv.participants,
+      createdBy: conv.createdBy || null,
+      admins: conv.admins || [],
+      lastMessage: conv.lastMessage || null,
+      updatedAt: conv.updatedAt,
+      lastActive: conv.lastActive,
+    }));
+
+    // Find all group chats where the logged-in user is a participant
     const groups = await Conversation.find({
       isGroup: true,
       participants: req.user.id,
     })
-      .populate("participants", "name email avatar")
-      .populate("admins", "name email avatar")
-      .populate("createdBy", "name email avatar")
-      .sort({ updatedAt: -1 })
-      .lean(); // FIX: returns plain JS objects
+      .populate("participants", "-password")
+      .populate("createdBy", "name email")
+      .populate("admins", "name email");
 
+    // Send combined response
     res.json({
       adminLogin,
       allAdmins,
-      groups, // include groups in same response
+      usersWithConversations,
+      groups,
     });
   } catch (err) {
-    console.error(err);
+    console.error("Error in getMe:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
 
 // Fetch conversation messages between user and admin
+// export const chatUser = async (req, res) => {
+//   const { userId, adminId } = req.params;
+//   try {
+//     const conversation = await Conversation.findOne({
+//       participants: { $all: [userId, adminId] },
+//     });
+
+//     if (!conversation) return res.json([]);
+
+//     // Fetch messages for this conversation
+//     const messages = await Message.find({ conversationId: conversation._id })
+//       .sort({ createdAt: 1 })
+//       .populate("sender", "name email")
+//       .populate("readBy", "name email");
+
+//     res.json(messages);
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Server error" });
+//   }
+// };
+
 export const chatUser = async (req, res) => {
-  const { userId, adminId } = req.params;
+  console.log("chatUser called with params:", req.params);
+  const { c_id } = req.params;
+  console.log("Fetching messages for conversation ID:", c_id);
   try {
-    const conversation = await Conversation.findOne({
-      participants: { $all: [userId, adminId] },
-    });
-
-    if (!conversation) return res.json([]);
-
-    // Fetch messages for this conversation
-    const messages = await Message.find({ conversationId: conversation._id })
+    const messages = await Message.find({ conversationId: c_id })
       .sort({ createdAt: 1 })
       .populate("sender", "name email")
       .populate("readBy", "name email");
@@ -59,7 +103,6 @@ export const chatUser = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
-
 export const saveMessage = async ({ sender, receiver, message }) => {
   try {
     // Sort IDs to ensure one conversation per pair

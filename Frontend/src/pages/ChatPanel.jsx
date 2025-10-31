@@ -23,9 +23,8 @@ export default function ChatPanel({ user, admin, onClose }) {
     setInputValue("");
     socket = io(`${import.meta.env.VITE_BACKEND_URL}`);
     socket.emit("joinRoom", roomId);
-
     // Fetch chat history
-    APIADMIN.get(`/chats/${user._id}/${admin._id}`)
+    APIADMIN.get(`/chats/${admin._id}`)
       .then((res) => {
         const normalized = res.data.map((msg) => ({
           ...msg,
@@ -34,8 +33,6 @@ export default function ChatPanel({ user, admin, onClose }) {
           timestamp: msg.createdAt || msg.timestamp,
         }));
         setMessages(normalized);
-        console.log("Chat history loaded:", normalized);
-
         socket.emit("markAsRead", {
           userId: user._id,
           otherUserId: admin._id,

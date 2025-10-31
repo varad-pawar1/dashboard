@@ -20,6 +20,7 @@ const initialState = {
   user: null,
   admins: [],
   groups: [],
+  usersWithConversations: [],
   loading: false,
   error: null,
   successMessage: null,
@@ -51,6 +52,7 @@ export default function adminReducer(state = initialState, action) {
         user: action.payload.user,
         admins: action.payload.admins,
         groups: action.payload.groups,
+        usersWithConversations: action.payload.usersWithConversations,
         error: null,
       };
 

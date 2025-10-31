@@ -17,7 +17,9 @@ let socket;
 export default function Dashboard() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { user, admins, groups, loading } = useSelector((state) => state.admin);
+  const { user, admins, groups, loading, usersWithConversations } = useSelector(
+    (state) => state.admin
+  );
 
   const [selectedAdmin, setSelectedAdmin] = useState(null);
   const [unreadCounts, setUnreadCounts] = useState({});
@@ -142,6 +144,7 @@ export default function Dashboard() {
         unreadCounts={unreadCounts}
         lastMessages={lastMessages}
         handleGroupClick={handleGroupClick}
+        usersWithConversations={usersWithConversations}
       />
 
       {isCreatingGroup ? (

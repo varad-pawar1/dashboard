@@ -20,7 +20,7 @@ router.post("/send-reset-link", protect, sendResetLink);
 router.post("/reset-password/:token", resetPassword);
 router.post("/create-group", protect, createGroup);
 // Chat history
-router.get("/chats/:userId/:adminId", protect, chatUser);
+router.get("/chats/:adminId", protect, chatUser);
 router.put("/chats/:id", protect, updateMessage);
 router.delete("/chats/:id", protect, deleteMessage);
 
