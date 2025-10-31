@@ -154,12 +154,21 @@ export function Sidebar({
                   onClick={() => onSelectChat(chat)}
                 >
                   <div className="chat-user-avatar">
-                    {isGroup ? chat.groupName.charAt(0).toUpperCase() : "V"}
+                    {/* {isGroup ? chat.groupName.charAt(0).toUpperCase() : "V"} */}
+                    {isGroup
+                      ? chat.groupName.charAt(0).toUpperCase()
+                      : chat.participants
+                          ?.find((p) => p._id !== user?._id)
+                          ?.name?.charAt(0)
+                          ?.toUpperCase()}
                   </div>
 
                   <div className="chat-user-info">
                     <p className="chat-user-name">
-                      {isGroup ? chat.groupName : chat.name}
+                      {isGroup
+                        ? chat.groupName
+                        : chat.participants?.find((p) => p._id !== user?._id)
+                            ?.name}
                     </p>
                     <span className="chat-user-last">{lastText}</span>
                   </div>
