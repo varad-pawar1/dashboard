@@ -18,16 +18,23 @@ export default function ChatPanel({ user, admin, onClose }) {
   const imageVideoInputRef = useRef();
 
   console.log("ChatPanel rendering for admin:", admin);
+  // Compute display name for the conversation header
+  const chatTitle = admin
+    ? admin.isGroup
+      ? admin.groupName
+      : admin.participants
+      ? (admin.participants.find((p) => String(p._id) !== String(user._id)) ||
+          {})?.name || admin.name || "Chat"
+      : admin.name || "Chat"
+    : "Chat";
   // 🔌 SOCKET INIT
   useEffect(() => {
     setInputValue("");
     socket = io(`${import.meta.env.VITE_BACKEND_URL}`);
-    socket.emit("joinRoom", {
-      conversationId: admin._id,
-    });
+    socket.emit("joinRoom", { conversationId: admin._id });
 
     // Fetch chat history
-    APIADMIN.get(`/chats/${admin._id}`)
+     APIADMIN.get(`/chats/${admin._id}`)
       .then((res) => {
         // Normalize message data
         const normalized = res.data.map((msg) => ({
@@ -39,10 +46,10 @@ export default function ChatPanel({ user, admin, onClose }) {
         setMessages(normalized);
 
         // ✅ Mark messages as read for the current user
-        socket.emit("markAsRead", {
-          userId: user._id, // current logged-in user
-          conversationId: admin._id, // conversation ID (not user ID)
-        });
+         socket.emit("markAsReadByConversation", {
+           userId: user._id,
+           conversationId: admin._id,
+         });
       })
       .catch((err) => {
         console.error("Error fetching chat history:", err);
@@ -50,7 +57,7 @@ export default function ChatPanel({ user, admin, onClose }) {
 
     inputRef.current?.focus();
 
-    socket.on("receiveMessage", (msg) => {
+     socket.on("receiveMessage", (msg) => {
       const normalizedMsg = {
         ...msg,
         sender: msg.sender?._id || msg.sender,
@@ -63,12 +70,12 @@ export default function ChatPanel({ user, admin, onClose }) {
           : [...prev, normalizedMsg]
       );
 
-      if (normalizedMsg.sender !== user._id) {
-        socket.emit("markAsRead", {
-          userId: user._id,
-          otherUserId: admin._id,
-        });
-      }
+       if (normalizedMsg.sender !== user._id) {
+         socket.emit("markAsReadByConversation", {
+           userId: user._id,
+           conversationId: admin._id,
+         });
+       }
     });
 
     socket.on("updateMessage", (updatedMsg) => {
@@ -126,10 +133,10 @@ export default function ChatPanel({ user, admin, onClose }) {
           message: inputValue,
         });
         const updatedMsg = res.data;
-        socket.emit("updateMessage", {
+         socket.emit("updateMessageByConversation", {
           ...updatedMsg,
           sender: user._id,
-          receiver: admin._id,
+           conversationId: admin._id,
         });
         setEditingMessageId(null);
         setInputValue("");
@@ -137,12 +144,12 @@ export default function ChatPanel({ user, admin, onClose }) {
         console.error(err);
       }
     } else {
-      const msgObj = {
-        sender: user._id,
-        receiver: admin._id,
-        message: inputValue,
-      };
-      socket.emit("sendMessage", msgObj);
+       const msgObj = {
+         conversationId: admin._id,
+         sender: user._id,
+         message: inputValue,
+       };
+       socket.emit("sendMessageByConversation", msgObj);
       setInputValue("");
     }
   };
@@ -151,10 +158,9 @@ export default function ChatPanel({ user, admin, onClose }) {
   const handleDelete = async (msgId) => {
     try {
       await APIADMIN.delete(`/chats/${msgId}`);
-      socket.emit("notifyDelete", {
+       socket.emit("notifyDeleteByConversation", {
         _id: msgId,
-        sender: user._id,
-        receiver: admin._id,
+         conversationId: admin._id,
       });
       setMessages((prev) =>
         prev.filter((m) => String(m._id) !== String(msgId))
@@ -214,7 +220,7 @@ export default function ChatPanel({ user, admin, onClose }) {
       const formData = new FormData();
       formData.append("file", selectedFile);
       formData.append("sender", user._id);
-      formData.append("receiver", admin._id);
+       formData.append("conversationId", admin._id);
 
       // Upload file to backend
       const res = await APIADMIN.post("/chats/upload", formData, {
@@ -227,7 +233,7 @@ export default function ChatPanel({ user, admin, onClose }) {
       const uploadedMessage = res.data;
 
       // The backend already saved it, we just notify the room
-      const roomId = [user._id, admin._id].sort().join("-");
+       const roomId = `conv-${admin._id}`;
 
       // Normalize uploaded message for socket emission
       const normalizedUploadedMsg = {
@@ -241,7 +247,10 @@ export default function ChatPanel({ user, admin, onClose }) {
       };
 
       // Notify the room about the new file message
-      socket.emit("sendMessage", normalizedUploadedMsg);
+       socket.emit("sendMessageByConversation", {
+         ...normalizedUploadedMsg,
+         conversationId: admin._id,
+       });
 
       // Clear preview and reset states
       setPreview(null);
@@ -290,7 +299,7 @@ export default function ChatPanel({ user, admin, onClose }) {
     <div className="chat-panel-backdrop">
       <div className="chat-panel" onClick={(e) => e.stopPropagation()}>
         <div className="chat-header">
-          <span>{admin.name}</span>
+          <span>{chatTitle}</span>
           <button className="close-btn" onClick={onClose}>
             <i className="fa-solid fa-circle-xmark"></i>
           </button>

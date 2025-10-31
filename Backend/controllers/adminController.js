@@ -64,29 +64,6 @@ export const getMe = async (req, res) => {
   }
 };
 
-// Fetch conversation messages between user and admin
-// export const chatUser = async (req, res) => {
-//   const { userId, adminId } = req.params;
-//   try {
-//     const conversation = await Conversation.findOne({
-//       participants: { $all: [userId, adminId] },
-//     });
-
-//     if (!conversation) return res.json([]);
-
-//     // Fetch messages for this conversation
-//     const messages = await Message.find({ conversationId: conversation._id })
-//       .sort({ createdAt: 1 })
-//       .populate("sender", "name email")
-//       .populate("readBy", "name email");
-
-//     res.json(messages);
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ message: "Server error" });
-//   }
-// };
-
 export const chatUser = async (req, res) => {
   const { conversationId } = req.params;
   try {
@@ -232,7 +209,7 @@ const detectFileType = (filename) => {
 // Upload file/image/video message to Cloudinary
 export const uploadFileMessage = async (req, res) => {
   try {
-    const { sender, receiver } = req.body;
+    const { sender, receiver, conversationId } = req.body;
     const file = req.file;
 
     if (!file) return res.status(400).json({ message: "No file uploaded" });
@@ -241,20 +218,25 @@ export const uploadFileMessage = async (req, res) => {
     const fileUrl = file.path;
     const fileType = detectFileType(file.originalname);
 
-    const participants = [sender, receiver].sort();
-
-    let conversation = await Conversation.findOne({ participants });
-
-    if (!conversation) {
-      conversation = new Conversation({
-        participants,
-      });
-      await conversation.save();
+    let targetConversationId;
+    if (conversationId) {
+      const conv = await Conversation.findById(conversationId);
+      if (!conv)
+        return res.status(404).json({ message: "Conversation not found" });
+      targetConversationId = conv._id;
+    } else {
+      const participants = [sender, receiver].sort();
+      let conversation = await Conversation.findOne({ participants });
+      if (!conversation) {
+        conversation = new Conversation({ participants });
+        await conversation.save();
+      }
+      targetConversationId = conversation._id;
     }
 
     // Create new message in Message collection
     const newMessage = new Message({
-      conversationId: conversation._id,
+      conversationId: targetConversationId,
       sender,
       message: "", // empty string for file-only messages
       fileUrl,
@@ -265,9 +247,10 @@ export const uploadFileMessage = async (req, res) => {
     await newMessage.save();
 
     // Update conversation's lastMessage and updatedAt
-    conversation.lastMessage = newMessage._id;
-    conversation.updatedAt = new Date();
-    await conversation.save();
+    await Conversation.findByIdAndUpdate(targetConversationId, {
+      lastMessage: newMessage._id,
+      updatedAt: new Date(),
+    });
 
     // Populate sender before returning
     await newMessage.populate("sender", "name email");
@@ -368,5 +351,23 @@ export const createGroup = async (req, res) => {
     res
       .status(500)
       .json({ success: false, message: "Failed to create group", error });
+  }
+};
+
+export const getOrCreateConversation = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { otherId } = req.params;
+    if (!otherId) return res.status(400).json({ message: "otherId required" });
+
+    const participants = [userId, otherId].sort();
+    let conversation = await Conversation.findOne({ participants, isGroup: false });
+    if (!conversation) {
+      conversation = await Conversation.create({ participants, isGroup: false });
+    }
+    res.json({ conversation });
+  } catch (err) {
+    console.error("getOrCreateConversation error:", err);
+    res.status(500).json({ message: "Server error" });
   }
 };

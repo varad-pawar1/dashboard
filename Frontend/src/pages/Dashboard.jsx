@@ -25,6 +25,7 @@ export default function Dashboard() {
   const [unreadCounts, setUnreadCounts] = useState({});
   const [lastMessages, setLastMessages] = useState({});
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
+  const [localConversations, setLocalConversations] = useState([]);
 
   useEffect(() => {
     if (!user?._id) return;
@@ -75,12 +76,29 @@ export default function Dashboard() {
       setUnreadCounts((prev) => ({ ...prev, [sender]: 0 }));
     });
 
-    //Update last message instantly when server notifies
+    //Update last message instantly when server notifies (legacy private)
     socket.on("updateLastMessage", ({ otherUserId, lastMessage }) => {
       setLastMessages((prev) => ({
         ...prev,
         [otherUserId]: lastMessage || null,
       }));
+    });
+
+    // Conversation-based updates
+    socket.on("updateConvLastMessage", ({ conversationId, lastMessage }) => {
+      setLastMessages((prev) => ({ ...prev, [conversationId]: lastMessage || null }));
+    });
+    socket.on("updateConvUnread", ({ conversationId, delta }) => {
+      setUnreadCounts((prev) => ({
+        ...prev,
+        [conversationId]: Math.max((prev[conversationId] || 0) + (delta || 0), 0),
+      }));
+    });
+    socket.on("setConvUnread", ({ conversationId, count }) => {
+      setUnreadCounts((prev) => ({ ...prev, [conversationId]: count }));
+    });
+    socket.on("resetConvUnread", ({ conversationId }) => {
+      setUnreadCounts((prev) => ({ ...prev, [conversationId]: 0 }));
     });
 
     return () => socket.disconnect();
@@ -93,7 +111,8 @@ export default function Dashboard() {
   const handleSelectAdmin = (chat) => {
     setSelectedAdmin(chat);
     setUnreadCounts((prev) => ({ ...prev, [chat._id]: 0 }));
-    socket.emit("markAsRead", { userId: user._id, otherUserId: chat._id });
+    // Prefer conversation-based mark as read
+    socket.emit("markAsReadByConversation", { userId: user._id, conversationId: chat._id });
   };
 
   const handleLogout = () => {
@@ -116,6 +135,16 @@ export default function Dashboard() {
   const handleCloseGroupCreator = () => {
     setIsCreatingGroup(false);
   };
+  const handleConversationStarted = (conversationLike) => {
+    setLocalConversations((prev) => {
+      const exists = prev.some((c) => String(c._id) === String(conversationLike._id));
+      return exists ? prev : [...prev, conversationLike];
+    });
+    // Initialize counters to avoid flicker
+    setUnreadCounts((prev) => ({ ...prev, [conversationLike._id]: 0 }));
+    setLastMessages((prev) => ({ ...prev, [conversationLike._id]: prev[conversationLike._id] || null }));
+    setSelectedAdmin(conversationLike);
+  };
   // Combine groups and admins into one array
   const combinedChats = [
     ...admins.map((a) => ({ ...a, isGroup: false })),
@@ -131,6 +160,29 @@ export default function Dashboard() {
     return new Date(timeB) - new Date(timeA);
   });
 
+  // Merge live-added conversations into the Redux list for rendering
+  const mergedConversations = (
+    usersWithConversations || []
+  ).concat(
+    localConversations.filter(
+      (lc) => !(usersWithConversations || []).some((uc) => String(uc._id) === String(lc._id))
+    )
+  );
+
+  // Sort conversations by latest message time (socket -> API fallback -> updatedAt)
+  const getTime = (c) => {
+    const lm = lastMessages?.[c._id];
+    return (
+      (lm && (lm.timestamp || lm.createdAt)) ||
+      (c.lastMessage && c.lastMessage.createdAt) ||
+      c.updatedAt ||
+      0
+    );
+  };
+  const sortedConversations = mergedConversations
+    .slice()
+    .sort((a, b) => new Date(getTime(b)) - new Date(getTime(a)));
+
   return (
     <div className="chat-app-container">
       <Sidebar
@@ -144,7 +196,8 @@ export default function Dashboard() {
         unreadCounts={unreadCounts}
         lastMessages={lastMessages}
         handleGroupClick={handleGroupClick}
-        usersWithConversations={usersWithConversations}
+        usersWithConversations={sortedConversations}
+        onConversationStarted={handleConversationStarted}
       />
 
       {isCreatingGroup ? (

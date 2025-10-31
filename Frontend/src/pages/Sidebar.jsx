@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import APIADMIN from "../api/admin";
 import Button from "../components/Button";
 import "../styles/dashboard.css";
 
@@ -13,6 +14,7 @@ export function Sidebar({
   lastMessages,
   handleGroupClick,
   usersWithConversations,
+  onConversationStarted,
 }) {
   const [showPopup, setShowPopup] = useState(false);
 
@@ -58,13 +60,37 @@ export function Sidebar({
             ) : chats.length > 0 ? (
               chats.map((chat) => {
                 const isGroup = chat.isGroup;
+                const handleClick = async () => {
+                  try {
+                    if (isGroup) {
+                      onSelectChat(chat);
+                      closePopup();
+                      return;
+                    }
+                    // Create or fetch private conversation by other user id
+                    const res = await APIADMIN.get(`/conversation/${chat._id}`);
+                    const conversation = res.data.conversation;
+                    if (conversation?._id) {
+                      const convLike = {
+                        ...conversation,
+                        name: chat.name,
+                        isGroup: false,
+                      };
+                      onConversationStarted?.(convLike);
+                      onSelectChat(convLike);
+                      closePopup();
+                    }
+                  } catch (e) {
+                    console.error("Failed to start conversation:", e);
+                  }
+                };
                 return (
                   <div
                     key={chat._id}
                     className={`chat-user-item ${
                       selectedChat?._id === chat._id ? "active" : ""
                     }`}
-                    onClick={() => onSelectChat(chat)}
+                    onClick={handleClick}
                   >
                     <div className="chat-user-avatar">
                       {isGroup
@@ -98,14 +124,27 @@ export function Sidebar({
           ) : usersWithConversations && usersWithConversations.length > 0 ? (
             usersWithConversations.map((chat) => {
               const isGroup = chat.isGroup;
-              const lastMsg = lastMessages[chat._id];
-              let lastText = lastMsg
-                ? lastMsg.text || lastMsg.fileType || ""
-                : "";
-
-              if (lastText.length > 25) {
+              const lastMsg =
+                lastMessages[String(chat._id)] ||
+                (chat.lastMessage
+                  ? {
+                      text: chat.lastMessage.fileUrl
+                        ? chat.lastMessage.fileType === "image"
+                          ? "📷 Image"
+                          : chat.lastMessage.fileType === "video"
+                          ? "🎥 Video"
+                          : "📎 File"
+                        : chat.lastMessage.message,
+                      timestamp: chat.lastMessage.createdAt,
+                    }
+                  : null);
+              let lastText = lastMsg ? lastMsg.text || "" : "";
+              if (lastText.length > 25)
                 lastText = lastText.substring(0, 25) + "...";
-              }
+              const unread = Number(
+                (unreadCounts || {})[String(chat._id)] || 0
+              );
+
               return (
                 <div
                   key={chat._id}
@@ -124,11 +163,9 @@ export function Sidebar({
                     </p>
                     <span className="chat-user-last">{lastText}</span>
                   </div>
-                  {unreadCounts[chat._id] > 0 && (
+                  {unread > 0 && (
                     <div className="unread-badge">
-                      {unreadCounts[chat._id] > 99
-                        ? "99+"
-                        : unreadCounts[chat._id]}
+                      {unread > 99 ? "99+" : unread}
                     </div>
                   )}
                 </div>
