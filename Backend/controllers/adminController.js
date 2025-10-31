@@ -88,21 +88,24 @@ export const getMe = async (req, res) => {
 // };
 
 export const chatUser = async (req, res) => {
-  console.log("chatUser called with params:", req.params);
-  const { c_id } = req.params;
-  console.log("Fetching messages for conversation ID:", c_id);
+  const { conversationId } = req.params;
   try {
-    const messages = await Message.find({ conversationId: c_id })
+    const messages = await Message.find({ conversationId })
       .sort({ createdAt: 1 })
       .populate("sender", "name email")
       .populate("readBy", "name email");
 
-    res.json(messages);
+    if (!messages.length) {
+      return res.status(200).json([]);
+    }
+
+    res.status(200).json(messages);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
+    console.error("Error fetching chat messages:", err);
+    res.status(500).json({ message: "Failed to fetch chat history" });
   }
 };
+
 export const saveMessage = async ({ sender, receiver, message }) => {
   try {
     // Sort IDs to ensure one conversation per pair

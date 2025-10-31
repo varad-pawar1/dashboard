@@ -16,29 +16,37 @@ export default function ChatPanel({ user, admin, onClose }) {
   const inputRef = useRef();
   const fileInputRef = useRef();
   const imageVideoInputRef = useRef();
-  const roomId = [user._id, admin._id].sort().join("-");
 
+  console.log("ChatPanel rendering for admin:", admin);
   // 🔌 SOCKET INIT
   useEffect(() => {
     setInputValue("");
     socket = io(`${import.meta.env.VITE_BACKEND_URL}`);
-    socket.emit("joinRoom", roomId);
+    socket.emit("joinRoom", {
+      conversationId: admin._id,
+    });
+
     // Fetch chat history
     APIADMIN.get(`/chats/${admin._id}`)
       .then((res) => {
+        // Normalize message data
         const normalized = res.data.map((msg) => ({
           ...msg,
-          sender: msg.sender?._id || msg.sender,
-          // Ensure timestamp compatibility (use createdAt if timestamp doesn't exist)
-          timestamp: msg.createdAt || msg.timestamp,
+          sender: msg.sender?._id || msg.sender, // handle populated or plain IDs
+          timestamp: msg.createdAt || msg.timestamp, // ensure timestamp consistency
         }));
+
         setMessages(normalized);
+
+        // ✅ Mark messages as read for the current user
         socket.emit("markAsRead", {
-          userId: user._id,
-          otherUserId: admin._id,
+          userId: user._id, // current logged-in user
+          conversationId: admin._id, // conversation ID (not user ID)
         });
       })
-      .catch(console.error);
+      .catch((err) => {
+        console.error("Error fetching chat history:", err);
+      });
 
     inputRef.current?.focus();
 

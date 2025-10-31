@@ -90,10 +90,10 @@ export default function Dashboard() {
     dispatch(fetchDashboardData()).catch(() => navigate("/login"));
   }, [dispatch, navigate]);
 
-  const handleSelectAdmin = (admin) => {
-    setSelectedAdmin(admin);
-    setUnreadCounts((prev) => ({ ...prev, [admin._id]: 0 }));
-    socket.emit("markAsRead", { userId: user._id, otherUserId: admin._id });
+  const handleSelectAdmin = (chat) => {
+    setSelectedAdmin(chat);
+    setUnreadCounts((prev) => ({ ...prev, [chat._id]: 0 }));
+    socket.emit("markAsRead", { userId: user._id, otherUserId: chat._id });
   };
 
   const handleLogout = () => {
