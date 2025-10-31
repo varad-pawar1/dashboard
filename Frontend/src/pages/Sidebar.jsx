@@ -1,72 +1,93 @@
-import React from "react";
+import React, { useState } from "react";
 import Button from "../components/Button";
 import "../styles/dashboard.css";
+
 export function Sidebar({
-  admins,
+  chats,
   loading,
-  onSelectAdmin,
-  selectedAdmin,
+  onSelectChat,
+  selectedChat,
   user,
   onLogout,
-  onSendResetLink,
   unreadCounts,
   lastMessages,
   handleGroupClick,
-  groups,
 }) {
+  const [showPopup, setShowPopup] = useState(false);
+
+  const togglePopup = () => setShowPopup((prev) => !prev);
+  const closePopup = () => setShowPopup(false);
+
   return (
     <div className="sidebar">
       <div className="sidebar-heading">
         <p className="chath">Chat</p>
-        <button className="new-group-btn" onClick={handleGroupClick}>
-          <i className="fa-solid fa-plus"></i> New Group
-        </button>
+        <i
+          className="fa-regular fa-pen-to-square"
+          onClick={togglePopup}
+          style={{ cursor: "pointer" }}
+        ></i>
       </div>
 
-      <div className="sidebar-chats">
-        {loading ? (
-          <p>Loading admins...</p>
-        ) : admins.length > 0 ? (
-          admins.map((admin) => {
-            const lastMsg = lastMessages[admin._id];
-            let lastText = lastMsg ? lastMsg.text : "";
+      {/* Popup section */}
+      {showPopup && (
+        <div className="popup">
+          <div className="popup-header">
+            <h2>Create</h2>
+            <i
+              className="fa-solid fa-xmark close-icon"
+              onClick={closePopup}
+              style={{ cursor: "pointer", fontSize: "20px" }}
+            ></i>
+          </div>
 
-            if (lastText.length > 20) {
-              lastText = lastText.substring(0, 20) + "...";
-            }
+          <button
+            className="new-group-btn"
+            onClick={() => {
+              handleGroupClick();
+              closePopup();
+            }}
+          >
+            <i className="fa-solid fa-plus"></i> New Group
+          </button>
 
-            return (
-              <div
-                key={admin._id}
-                className={`chat-user-item ${
-                  selectedAdmin?._id === admin._id ? "active" : ""
-                }`}
-                onClick={() => onSelectAdmin(admin)}
-              >
-                <div className="chat-user-avatar">
-                  {admin.name.charAt(0).toUpperCase()}
-                </div>
+          <div className="sidebar-chats">
+            {loading ? (
+              <p>Loading chats...</p>
+            ) : chats.length > 0 ? (
+              chats.map((chat) => {
+                const isGroup = chat.isGroup;
+                return (
+                  <div
+                    key={chat._id}
+                    className={`chat-user-item ${
+                      selectedChat?._id === chat._id ? "active" : ""
+                    }`}
+                    onClick={() => onSelectChat(chat)}
+                  >
+                    <div className="chat-user-avatar">
+                      {isGroup
+                        ? chat.groupName.charAt(0).toUpperCase()
+                        : chat.name.charAt(0).toUpperCase()}
+                    </div>
 
-                <div className="chat-user-info">
-                  <p className="chat-user-name">{admin.name}</p>
-                  <p style={{ fontSize: "12px" }}>{admin.email}</p>
-                  <span className="chat-user-last">{lastText}</span>
-                </div>
-
-                {/* Unread badge */}
-                {unreadCounts[admin._id] > 0 && (
-                  <div className="unread-badge">
-                    {unreadCounts[admin._id] > 99
-                      ? "99+"
-                      : unreadCounts[admin._id]}
+                    <div className="chat-user-info">
+                      <p className="chat-user-name">
+                        {isGroup ? chat.groupName : chat.name}
+                      </p>
+                    </div>
                   </div>
-                )}
-              </div>
-            );
-          })
-        ) : (
-          <p>No admins found</p>
-        )}
+                );
+              })
+            ) : (
+              <p>No chats found</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="conversation">
+        <div className="conversation-chats"></div>
       </div>
 
       <div className="sidebar-footer">

@@ -166,12 +166,30 @@
 }
 
 /* Sidebar */
-.sidebar {
+.sidebar,
+.conversation,
+.popup {
   width: 300px;
   background-color: #fff;
   display: flex;
   flex-direction: column;
   border-right: 1px solid #ddd;
+}
+.popup {
+  position: absolute;
+  top: 30px;
+  left: 200px;
+  z-index: 1000;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  height: 500px;
+  padding: 20px;
+}
+.popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
 }
 .userInfo {
   display: flex;
@@ -181,7 +199,8 @@
   justify-content: center;
   align-items: center;
 }
-.sidebar-chats {
+.sidebar-chats,
+.conversation {
   flex: 1;
   overflow-y: auto;
 }
@@ -302,18 +321,26 @@
   font-size: 1rem;
 }
 
-.chat-header .close-btn {
+.chat-header .close-btn,
+.close-icon,
+.fa-circle-xmark {
   border: none;
   font-size: 20px;
   cursor: pointer;
   transition: all 0.3s ease;
 }
 
-.close-btn:hover {
+.close-btn:hover,
+.close-icon:hover,
+.fa-pen-to-square:hover,
+.fa-circle-xmark:hover {
   transform: scale(1.05);
 }
 
-.close-btn:active {
+.close-btn:active,
+.close-icon:active,
+.fa-pen-to-square:active,
+.fa-circle-xmark:active {
   transform: scale(0.95);
 }
 /* Chat messages area */

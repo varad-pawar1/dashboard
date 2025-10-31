@@ -19,6 +19,7 @@ const initialState = {
   form: { email: "", password: "", newPassword: "", confirmPassword: "" },
   user: null,
   admins: [],
+  groups: [],
   loading: false,
   error: null,
   successMessage: null,

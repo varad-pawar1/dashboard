@@ -49,10 +49,6 @@
   transition: color 0.2s;
 }
 
-.close-btn:hover {
-  color: #fff;
-}
-
 /* Body */
 .newgroup-body {
   flex: 1;

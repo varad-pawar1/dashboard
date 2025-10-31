@@ -31,6 +31,7 @@ export const fetchDashboardData = () => async (dispatch) => {
       payload: {
         user: res.data.adminLogin,
         admins: res.data.allAdmins,
+        groups: res.data.groups,
       },
     });
 
