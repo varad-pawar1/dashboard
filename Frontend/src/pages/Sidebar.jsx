@@ -44,7 +44,9 @@ export function Sidebar({
               // Determine the other user for private chats
               const otherUser = !isGroup
                 ? Array.isArray(conv.participants)
-                  ? conv.participants.find((p) => String(p?._id || p) !== String(user._id))
+                  ? conv.participants.find(
+                      (p) => String(p?._id || p) !== String(user._id)
+                    )
                   : null
                 : null;
 

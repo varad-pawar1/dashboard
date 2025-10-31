@@ -8,6 +8,9 @@ export default function ChatPanel({ user, admin, socket, onClose }) {
   const [menuVisibleId, setMenuVisibleId] = useState(null);
   const [preview, setPreview] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [conversationId, setConversationId] = useState(
+    admin.conversationId || null
+  );
 
   const scrollRef = useRef();
   const inputRef = useRef();
@@ -17,12 +20,42 @@ export default function ChatPanel({ user, admin, socket, onClose }) {
     ? `group-${admin.conversationId}`
     : [user._id, admin.otherUserId].sort().join("-");
 
-  // 🔌 SOCKET INIT (reuse shared socket)
+  // 🔌 SOCKET INIT (reuse shared socket) and ensure conversationId exists for private chats
   useEffect(() => {
+    let isActive = true;
     setInputValue("");
     socket?.emit("joinRoom", roomId);
-    // Fetch chat history
-    APIADMIN.get(`/chats/${admin.conversationId}`)
+    const ensureConversation = async () => {
+      if (admin.isGroup) return admin.conversationId;
+      if (admin.conversationId) return admin.conversationId;
+      // fetch or create for private chat
+      const res = await APIADMIN.get(`/conversation/${admin.otherUserId}`);
+      return res.data.conversation?._id;
+    };
+
+    ensureConversation()
+      .then((cid) => {
+        if (!isActive) return;
+        if (cid && cid !== conversationId) setConversationId(cid);
+        const targetCid = cid || admin.conversationId;
+        if (!targetCid) return;
+        // Fetch chat history
+        return APIADMIN.get(`/chats/${targetCid}`).then((res) => {
+          const normalized = res.data.map((msg) => ({
+            ...msg,
+            sender: msg.sender?._id || msg.sender,
+            // Ensure timestamp compatibility (use createdAt if timestamp doesn't exist)
+            timestamp: msg.createdAt || msg.timestamp,
+          }));
+          setMessages(normalized);
+          if (!admin.isGroup && admin.otherUserId) {
+            socket?.emit("markAsRead", {
+              userId: user._id,
+              otherUserId: admin.otherUserId,
+            });
+          }
+        });
+      })
       .then((res) => {
         const normalized = res.data.map((msg) => ({
           ...msg,
@@ -55,7 +88,11 @@ export default function ChatPanel({ user, admin, socket, onClose }) {
           : [...prev, normalizedMsg]
       );
 
-      if (!admin.isGroup && normalizedMsg.sender !== user._id && admin.otherUserId) {
+      if (
+        !admin.isGroup &&
+        normalizedMsg.sender !== user._id &&
+        admin.otherUserId
+      ) {
         socket?.emit("markAsRead", {
           userId: user._id,
           otherUserId: admin.otherUserId,
@@ -100,6 +137,7 @@ export default function ChatPanel({ user, admin, socket, onClose }) {
       socket?.off("receiveMessage", onReceive);
       socket?.off("updateMessage", onUpdate);
       socket?.off("deleteMessage", onDelete);
+      isActive = false;
     };
   }, [user._id, admin.conversationId, admin.otherUserId]);
 

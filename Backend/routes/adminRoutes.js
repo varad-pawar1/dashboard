@@ -9,6 +9,7 @@ import {
   deleteMessage,
   uploadFileMessage,
   createGroup,
+  getOrCreateConversation,
 } from "../controllers/adminController.js";
 import { upload } from "../middleware/upload.js";
 
@@ -21,6 +22,8 @@ router.post("/reset-password/:token", resetPassword);
 router.post("/create-group", protect, createGroup);
 // Chat history by conversation id
 router.get("/chats/:c_id", protect, chatUser);
+// Get or create private conversation by other user id
+router.get("/conversation/:otherId", protect, getOrCreateConversation);
 router.put("/chats/:id", protect, updateMessage);
 router.delete("/chats/:id", protect, deleteMessage);
 

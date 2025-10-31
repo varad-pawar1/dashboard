@@ -66,16 +66,9 @@ export const getMe = async (req, res) => {
 
 // Fetch conversation messages between user and admin
 export const chatUser = async (req, res) => {
-  const { userId, adminId } = req.params;
+  const { c_id } = req.params;
   try {
-    const conversation = await Conversation.findOne({
-      participants: { $all: [userId, adminId] },
-    });
-
-    if (!conversation) return res.json([]);
-
-    // Fetch messages for this conversation
-    const messages = await Message.find({ conversationId: conversation._id })
+    const messages = await Message.find({ conversationId: c_id })
       .sort({ createdAt: 1 })
       .populate("sender", "name email")
       .populate("readBy", "name email");
@@ -381,5 +374,29 @@ export const createGroup = async (req, res) => {
     res
       .status(500)
       .json({ success: false, message: "Failed to create group", error });
+  }
+};
+
+export const getOrCreateConversation = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { otherId } = req.params;
+    if (!otherId) return res.status(400).json({ message: "otherId required" });
+
+    const participants = [userId, otherId].sort();
+    let conversation = await Conversation.findOne({
+      participants: { $all: participants },
+      isGroup: false,
+    });
+    if (!conversation) {
+      conversation = await Conversation.create({
+        participants,
+        isGroup: false,
+      });
+    }
+    res.json({ conversation });
+  } catch (err) {
+    console.error("getOrCreateConversation error:", err);
+    res.status(500).json({ message: "Server error" });
   }
 };
