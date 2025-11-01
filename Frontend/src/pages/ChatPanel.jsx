@@ -11,8 +11,13 @@ export default function ChatPanel({ user, admin, onClose }) {
   const [menuVisibleId, setMenuVisibleId] = useState(null);
   const [preview, setPreview] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
-
   const [sending, setSending] = useState(false);
+
+  // NEW: Online status and typing indicators
+  const [onlineUsers, setOnlineUsers] = useState([]);
+  const [typingUsers, setTypingUsers] = useState(new Map());
+  const typingTimeoutRef = useRef(null);
+
   const scrollRef = useRef();
   const inputRef = useRef();
   const fileInputRef = useRef();
@@ -31,25 +36,71 @@ export default function ChatPanel({ user, admin, onClose }) {
         "Chat"
       : admin.name || "Chat"
     : "Chat";
+
+  // Get other participant (for 1-on-1 chat)
+  const otherParticipant = admin?.isGroup
+    ? null
+    : admin.participants?.find((p) => String(p._id) !== String(user._id));
+
+  // Check if other user is online
+  const isOtherUserOnline = otherParticipant
+    ? onlineUsers.includes(String(otherParticipant._id))
+    : false;
+
   // 🔌 SOCKET INIT
   useEffect(() => {
     setInputValue("");
     socket = io(`${import.meta.env.VITE_BACKEND_URL}`);
+
+    // Join user room first
+    socket.emit("joinUser", user._id);
+
+    // Then join conversation room
     socket.emit("joinRoom", { conversationId: admin._id });
+
+    // NEW: Listen for online users
+    socket.on("onlineUsers", (users) => {
+      setOnlineUsers(users);
+    });
+
+    // NEW: Listen for user online/offline status
+    socket.on("userOnline", ({ userId, status }) => {
+      if (status === "online") {
+        setOnlineUsers((prev) => [...new Set([...prev, userId])]);
+      } else {
+        setOnlineUsers((prev) => prev.filter((id) => id !== userId));
+      }
+    });
+
+    // NEW: Listen for typing indicators
+    socket.on(
+      "userTyping",
+      ({ conversationId, userId, userName, isTyping }) => {
+        if (conversationId === admin._id && userId !== user._id) {
+          setTypingUsers((prev) => {
+            const newMap = new Map(prev);
+            if (isTyping) {
+              newMap.set(userId, userName || "Someone");
+            } else {
+              newMap.delete(userId);
+            }
+            return newMap;
+          });
+        }
+      }
+    );
 
     // Fetch chat history
     APIADMIN.get(`/chats/${admin._id}`)
       .then((res) => {
-        // Normalize message data
         const normalized = res.data.map((msg) => ({
           ...msg,
-          sender: msg.sender?._id || msg.sender, // handle populated or plain IDs
-          timestamp: msg.createdAt || msg.timestamp, // ensure timestamp consistency
+          sender: msg.sender?._id || msg.sender,
+          timestamp: msg.createdAt || msg.timestamp,
         }));
 
         setMessages(normalized);
 
-        // Mark messages as read for the current user
         socket.emit("markAsReadByConversation", {
           userId: user._id,
           conversationId: admin._id,
@@ -65,7 +116,6 @@ export default function ChatPanel({ user, admin, onClose }) {
       const normalizedMsg = {
         ...msg,
         sender: msg.sender?._id || msg.sender,
-        // Ensure timestamp compatibility (use createdAt if timestamp doesn't exist)
         timestamp: msg.createdAt || msg.timestamp,
       };
       setMessages((prev) =>
@@ -86,7 +136,6 @@ export default function ChatPanel({ user, admin, onClose }) {
       const normalized = {
         ...updatedMsg,
         sender: updatedMsg.sender?._id || updatedMsg.sender,
-        // Ensure timestamp compatibility (use createdAt if timestamp doesn't exist)
         timestamp: updatedMsg.createdAt || updatedMsg.timestamp,
       };
       setMessages((prev) =>
@@ -116,6 +165,9 @@ export default function ChatPanel({ user, admin, onClose }) {
       socket.off("receiveMessage");
       socket.off("updateMessage");
       socket.off("deleteMessage");
+      socket.off("onlineUsers");
+      socket.off("userOnline");
+      socket.off("userTyping");
       socket.disconnect();
     };
   }, [user._id, admin._id]);
@@ -127,9 +179,47 @@ export default function ChatPanel({ user, admin, onClose }) {
 
   const isEditing = Boolean(editingMessageId);
 
+  // NEW: Handle typing with indicator
+  const handleInputChange = (e) => {
+    const value = e.target.value;
+    setInputValue(value);
+
+    // Don't send typing indicator if editing
+    if (isEditing) return;
+
+    // Emit typing event
+    socket.emit("typing", {
+      conversationId: admin._id,
+      userId: user._id,
+      userName: user.name,
+    });
+
+    // Clear previous timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Stop typing after 2 seconds of inactivity
+    typingTimeoutRef.current = setTimeout(() => {
+      socket.emit("stopTyping", {
+        conversationId: admin._id,
+        userId: user._id,
+      });
+    }, 2000);
+  };
+
   // SEND MESSAGE
   const handleSend = async () => {
     if (!inputValue.trim()) return;
+
+    // Stop typing indicator
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    socket.emit("stopTyping", {
+      conversationId: admin._id,
+      userId: user._id,
+    });
 
     if (editingMessageId) {
       try {
@@ -206,7 +296,6 @@ export default function ChatPanel({ user, admin, onClose }) {
     setMenuVisibleId((prev) => (prev === msg._id ? null : msg._id));
   };
 
-  //  Show file dialog options
   const showFileDialog = () => {
     const fileOptions = document.querySelector(".file-options");
     if (fileOptions) {
@@ -215,54 +304,42 @@ export default function ChatPanel({ user, admin, onClose }) {
     }
   };
 
-  // Handle file uploads without creating duplicate messages
   const handleFileSend = async () => {
     if (!selectedFile) return;
     setSending(true);
 
     try {
-      // Create FormData to send file
       const formData = new FormData();
       formData.append("file", selectedFile);
       formData.append("sender", user._id);
       formData.append("conversationId", admin._id);
 
-      // Upload file to backend
       const res = await APIADMIN.post("/chats/upload", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },
       });
 
-      // Get the uploaded message data from response
       const uploadedMessage = res.data;
 
-      // The backend already saved it, we just notify the room
-      const roomId = `conv-${admin._id}`;
-
-      // Normalize uploaded message for socket emission
       const normalizedUploadedMsg = {
         ...uploadedMessage,
         sender:
           uploadedMessage.sender?._id || uploadedMessage.sender || user._id,
         receiver: admin._id,
-        // Ensure timestamp compatibility
         timestamp: uploadedMessage.createdAt || uploadedMessage.timestamp,
-        _skipSave: true, // Flag to prevent duplicate save
+        _skipSave: true,
       };
 
-      // Notify the room about the new file message
       socket.emit("sendMessageByConversation", {
         ...normalizedUploadedMsg,
         conversationId: admin._id,
       });
 
-      // Clear preview and reset states
       setPreview(null);
       setSelectedFile(null);
       setInputValue("");
 
-      // Reset file inputs
       if (fileInputRef.current) fileInputRef.current.value = "";
       if (imageVideoInputRef.current) imageVideoInputRef.current.value = "";
     } catch (err) {
@@ -274,16 +351,14 @@ export default function ChatPanel({ user, admin, onClose }) {
     }
   };
 
-  // Update the handleFileSelect to also handle validation
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Optional: Add file size validation (e.g., max 10MB)
-    const maxSize = 10 * 1024 * 1024; // 10MB
+    const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) {
       alert("File size exceeds 10MB. Please select a smaller file.");
-      e.target.value = ""; // Reset input
+      e.target.value = "";
       return;
     }
 
@@ -291,15 +366,24 @@ export default function ChatPanel({ user, admin, onClose }) {
     setPreview(URL.createObjectURL(file));
   };
 
-  // Cancel preview and clear all states
   const handleCancelPreview = () => {
     setPreview(null);
     setSelectedFile(null);
     setInputValue("");
 
-    // Reset file inputs
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (imageVideoInputRef.current) imageVideoInputRef.current.value = "";
+  };
+
+  // NEW: Get typing users display text
+  const getTypingText = () => {
+    const typingUserNames = Array.from(typingUsers.values());
+    if (typingUserNames.length === 0) return "";
+    if (typingUserNames.length === 1)
+      return `${typingUserNames[0]} is typing...`;
+    if (typingUserNames.length === 2)
+      return `${typingUserNames[0]} and ${typingUserNames[1]} are typing...`;
+    return `${typingUserNames.length} people are typing...`;
   };
 
   // UI RENDER
@@ -307,7 +391,25 @@ export default function ChatPanel({ user, admin, onClose }) {
     <div className="chat-panel-backdrop">
       <div className="chat-panel" onClick={(e) => e.stopPropagation()}>
         <div className="chat-header">
-          <span>{chatTitle}</span>
+          <div className="chat-header-info">
+            {/* NEW: Online status indicator */}
+            {!admin.isGroup && (
+              <span
+                className={`status-indicator ${
+                  isOtherUserOnline ? "online" : "offline"
+                }`}
+              ></span>
+            )}
+            <div className="chat-header-text">
+              <span className="chat-title">{chatTitle}</span>
+              {/* NEW: Online/Offline text */}
+              {!admin.isGroup && (
+                <span className="status-text">
+                  {isOtherUserOnline ? "Online" : "Offline"}
+                </span>
+              )}
+            </div>
+          </div>
           <button className="close-btn" onClick={onClose}>
             <i className="fa-solid fa-circle-xmark"></i>
           </button>
@@ -330,7 +432,6 @@ export default function ChatPanel({ user, admin, onClose }) {
                 onClick={(e) => handleMessageClick(e, msg)}
               >
                 {msg.fileUrl ? (
-                  // Fixed: Check fileType without slash
                   msg.fileType === "image" ? (
                     <img
                       src={msg.fileUrl}
@@ -363,7 +464,6 @@ export default function ChatPanel({ user, admin, onClose }) {
                     <button onClick={() => handleDelete(msg._id)}>
                       Delete
                     </button>
-                    {/* Only show Edit for text messages, not files */}
                     {!msg.fileUrl && (
                       <button onClick={() => handleEdit(msg)}>Edit</button>
                     )}
@@ -373,6 +473,18 @@ export default function ChatPanel({ user, admin, onClose }) {
             );
           })}
         </div>
+
+        {/* NEW: Typing Indicator */}
+        {typingUsers.size > 0 && (
+          <div className="typing-indicator">
+            <div className="typing-dots">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <span className="typing-text">{getTypingText()}</span>
+          </div>
+        )}
 
         {/* File Preview Box */}
         {preview && (
@@ -426,7 +538,6 @@ export default function ChatPanel({ user, admin, onClose }) {
             </div>
           </div>
 
-          {/* Inputs */}
           <input
             type="file"
             ref={imageVideoInputRef}
@@ -450,7 +561,7 @@ export default function ChatPanel({ user, admin, onClose }) {
               isEditing ? "Edit your message..." : "Type a message..."
             }
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={handleInputChange}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
           />
 

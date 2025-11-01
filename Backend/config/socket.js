@@ -4,6 +4,9 @@ import Message from "../models/Message.js";
 
 let io;
 
+// Store online users: { userId: socketId }
+const onlineUsers = new Map();
+
 export const initSocket = (server) => {
   io = new Server(server, {
     cors: { origin: process.env.FRONTEND_URL, credentials: true },
@@ -15,6 +18,12 @@ export const initSocket = (server) => {
     socket.on("joinUser", async (userId) => {
       socket.userId = userId;
       socket.join(userId);
+
+      // Mark user as online
+      onlineUsers.set(userId, socket.id);
+
+      // Broadcast to all users that this user is online
+      io.emit("userOnline", { userId, status: "online" });
 
       try {
         const conversations = await Conversation.find({ participants: userId });
@@ -51,6 +60,10 @@ export const initSocket = (server) => {
         }
 
         socket.emit("initChatData", { unreadCounts, lastMessages });
+
+        // Send list of all online users to the newly connected user
+        const onlineUserIds = Array.from(onlineUsers.keys());
+        socket.emit("onlineUsers", onlineUserIds);
       } catch (err) {
         console.error("Error fetching initial chat data:", err);
       }
@@ -66,6 +79,25 @@ export const initSocket = (server) => {
       if (conversationId) {
         socket.join(`conv-${conversationId}`);
       }
+    });
+
+    // Typing indicator - user started typing
+    socket.on("typing", ({ conversationId, userId, userName }) => {
+      socket.to(`conv-${conversationId}`).emit("userTyping", {
+        conversationId,
+        userId,
+        userName,
+        isTyping: true,
+      });
+    });
+
+    // Typing indicator - user stopped typing
+    socket.on("stopTyping", ({ conversationId, userId }) => {
+      socket.to(`conv-${conversationId}`).emit("userTyping", {
+        conversationId,
+        userId,
+        isTyping: false,
+      });
     });
 
     socket.on("sendMessageByConversation", async (data) => {
@@ -283,6 +315,13 @@ export const initSocket = (server) => {
     });
 
     socket.on("disconnect", () => {
+      // Mark user as offline
+      if (socket.userId) {
+        onlineUsers.delete(socket.userId);
+
+        // Broadcast to all users that this user is offline
+        io.emit("userOnline", { userId: socket.userId, status: "offline" });
+      }
       // console.log("Client disconnected:", socket.id);
     });
   });
@@ -295,4 +334,12 @@ export const getIO = () => {
     throw new Error("Socket.io not initialized!");
   }
   return io;
+};
+
+export const getOnlineUsers = () => {
+  return Array.from(onlineUsers.keys());
+};
+
+export const isUserOnline = (userId) => {
+  return onlineUsers.has(userId);
 };
