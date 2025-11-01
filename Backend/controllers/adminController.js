@@ -330,9 +330,11 @@ export const getOrCreateConversation = async (req, res) => {
   try {
     const userId = req.user.id;
     const { otherId } = req.params;
+    const io = req.app.locals.io;
     if (!otherId) return res.status(400).json({ message: "otherId required" });
 
     const participants = [userId, otherId].sort();
+    let isNew = false;
     let conversation = await Conversation.findOne({
       participants,
       isGroup: false,
@@ -342,8 +344,18 @@ export const getOrCreateConversation = async (req, res) => {
         participants,
         isGroup: false,
       });
+      isNew = true;
     }
     await conversation.populate("participants", "name email avatar");
+    
+    // Broadcast conversation creation/found to both participants in real-time
+    if (io && (isNew || !conversation.lastMessage)) {
+      for (const participant of conversation.participants) {
+        const pid = participant._id?.toString() || participant.toString();
+        io.to(pid).emit("newConversationCreated", conversation);
+      }
+    }
+    
     res.json({ conversation });
   } catch (err) {
     console.error("getOrCreateConversation error:", err);

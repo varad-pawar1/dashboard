@@ -109,17 +109,31 @@ export default function Dashboard() {
 
     // Listen for new group creation (broadcasted to all participants)
     socket.on("newGroupCreated", (group) => {
-      console.log("Received newGroupCreated event:", group);
       setLocalConversations((prev) => {
         const exists = prev.some((c) => String(c._id) === String(group._id));
         if (exists) return prev;
-        console.log("Adding new group to conversations:", group.groupName);
         return [...prev, group];
       });
       setUnreadCounts((prev) => ({ ...prev, [group._id]: 0 }));
       setLastMessages((prev) => ({
         ...prev,
         [group._id]: prev[group._id] || null,
+      }));
+    });
+
+    // Listen for new private conversation creation (broadcasted to both participants)
+    socket.on("newConversationCreated", (conversation) => {
+      setLocalConversations((prev) => {
+        const exists = prev.some(
+          (c) => String(c._id) === String(conversation._id)
+        );
+        if (exists) return prev;
+        return [...prev, conversation];
+      });
+      setUnreadCounts((prev) => ({ ...prev, [conversation._id]: 0 }));
+      setLastMessages((prev) => ({
+        ...prev,
+        [conversation._id]: prev[conversation._id] || null,
       }));
     });
 
