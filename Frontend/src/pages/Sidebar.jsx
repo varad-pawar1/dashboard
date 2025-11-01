@@ -20,7 +20,6 @@ export function Sidebar({
 
   const togglePopup = () => setShowPopup((prev) => !prev);
   const closePopup = () => setShowPopup(false);
-  console.log("usersWithConversations in Sidebar:", usersWithConversations);
   return (
     <div className="sidebar">
       <div className="sidebar-heading">
@@ -154,21 +153,30 @@ export function Sidebar({
                   onClick={() => onSelectChat(chat)}
                 >
                   <div className="chat-user-avatar">
-                    {/* {isGroup ? chat.groupName.charAt(0).toUpperCase() : "V"} */}
                     {isGroup
-                      ? chat.groupName.charAt(0).toUpperCase()
-                      : chat.participants
-                          ?.find((p) => p._id !== user?._id)
-                          ?.name?.charAt(0)
-                          ?.toUpperCase()}
+                      ? (chat.groupName || "G").charAt(0).toUpperCase()
+                      : (() => {
+                          const otherUser = chat.participants?.find(
+                            (p) => String(p._id || p) !== String(user?._id)
+                          );
+                          return (
+                            otherUser?.name?.charAt(0)?.toUpperCase() ||
+                            chat.name?.charAt(0)?.toUpperCase() ||
+                            "U"
+                          );
+                        })()}
                   </div>
 
                   <div className="chat-user-info">
                     <p className="chat-user-name">
                       {isGroup
-                        ? chat.groupName
-                        : chat.participants?.find((p) => p._id !== user?._id)
-                            ?.name}
+                        ? chat.groupName || "Group"
+                        : (() => {
+                            const otherUser = chat.participants?.find(
+                              (p) => String(p._id || p) !== String(user?._id)
+                            );
+                            return otherUser?.name || chat.name || "User";
+                          })()}
                     </p>
                     <span className="chat-user-last">{lastText}</span>
                   </div>

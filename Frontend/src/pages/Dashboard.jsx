@@ -107,6 +107,19 @@ export default function Dashboard() {
       setUnreadCounts((prev) => ({ ...prev, [conversationId]: 0 }));
     });
 
+    // Listen for new group creation (broadcasted to all participants)
+    socket.on("newGroupCreated", (group) => {
+      setLocalConversations((prev) => {
+        const exists = prev.some((c) => String(c._id) === String(group._id));
+        return exists ? prev : [...prev, group];
+      });
+      setUnreadCounts((prev) => ({ ...prev, [group._id]: 0 }));
+      setLastMessages((prev) => ({
+        ...prev,
+        [group._id]: prev[group._id] || null,
+      }));
+    });
+
     return () => socket.disconnect();
   }, [user]);
 
@@ -142,6 +155,19 @@ export default function Dashboard() {
     setSelectedAdmin(null);
   };
   const handleCloseGroupCreator = () => {
+    setIsCreatingGroup(false);
+  };
+  const handleGroupCreated = (group) => {
+    setLocalConversations((prev) => {
+      const exists = prev.some((c) => String(c._id) === String(group._id));
+      return exists ? prev : [...prev, group];
+    });
+    setUnreadCounts((prev) => ({ ...prev, [group._id]: 0 }));
+    setLastMessages((prev) => ({
+      ...prev,
+      [group._id]: prev[group._id] || null,
+    }));
+    setSelectedAdmin(group);
     setIsCreatingGroup(false);
   };
   const handleConversationStarted = (conversationLike) => {
@@ -221,6 +247,7 @@ export default function Dashboard() {
           onClose={handleCloseGroupCreator}
           socket={socket}
           user={user}
+          onGroupCreated={handleGroupCreated}
         />
       ) : selectedAdmin ? (
         <ChatPanel

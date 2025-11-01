@@ -290,6 +290,26 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Handle group creation notification - broadcast to all participants
+  socket.on("groupCreated", async (groupData) => {
+    try {
+      const conversation = await Conversation.findById(groupData._id)
+        .populate("participants", "name email avatar")
+        .populate("createdBy", "name email")
+        .populate("admins", "name email");
+      
+      if (!conversation || !conversation.isGroup) return;
+
+      // Broadcast to all participants so they see the group immediately
+      for (const participant of conversation.participants) {
+        const pid = participant.toString();
+        io.to(pid).emit("newGroupCreated", conversation);
+      }
+    } catch (err) {
+      console.error("Error broadcasting group creation:", err);
+    }
+  });
+
   socket.on("disconnect", () => {
     // console.log("Client disconnected:", socket.id);
   });

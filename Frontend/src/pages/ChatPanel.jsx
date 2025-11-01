@@ -17,7 +17,6 @@ export default function ChatPanel({ user, admin, onClose }) {
   const fileInputRef = useRef();
   const imageVideoInputRef = useRef();
 
-  console.log("ChatPanel rendering for admin:", admin);
   // Compute display name for the conversation header
   const chatTitle = admin
     ? admin.isGroup

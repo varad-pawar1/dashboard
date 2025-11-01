@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import APIADMIN from "../api/admin";
 import "../styles/newgroup.css";
 
-export default function NewGroup({ admins = [], onClose, socket, user }) {
+export default function NewGroup({ admins = [], onClose, socket, user, onGroupCreated }) {
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [groupName, setGroupName] = useState("");
   const [creating, setCreating] = useState(false);
@@ -42,8 +42,13 @@ export default function NewGroup({ admins = [], onClose, socket, user }) {
       // Emit event via socket for real-time update
       socket.emit("groupCreated", createdGroup);
 
-      alert("Group created successfully!");
-      onClose();
+      // Call callback to add group to conversation list
+      if (onGroupCreated) {
+        onGroupCreated(createdGroup);
+      } else {
+        alert("Group created successfully!");
+        onClose();
+      }
     } catch (err) {
       console.error("Error creating group:", err);
       alert("Failed to create group. Please try again.");

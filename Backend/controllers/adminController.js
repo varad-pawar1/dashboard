@@ -303,6 +303,10 @@ export const createGroup = async (req, res) => {
       admins: [createdBy],
     });
 
+    await group.populate("participants", "name email avatar");
+    await group.populate("createdBy", "name email");
+    await group.populate("admins", "name email");
+
     res.status(201).json({ success: true, group });
   } catch (error) {
     console.error("Group creation error:", error);
@@ -329,6 +333,7 @@ export const getOrCreateConversation = async (req, res) => {
         isGroup: false,
       });
     }
+    await conversation.populate("participants", "name email avatar");
     res.json({ conversation });
   } catch (err) {
     console.error("getOrCreateConversation error:", err);
