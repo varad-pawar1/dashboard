@@ -313,7 +313,7 @@ export const createGroup = async (req, res) => {
       for (const participant of group.participants) {
         const pid = participant._id?.toString() || participant.toString();
         io.to(pid).emit("newGroupCreated", group);
-        console.log(`Broadcasting newGroupCreated to participant: ${pid}`);
+        // console.log(`Broadcasting newGroupCreated to participant: ${pid}`);
       }
     }
 
@@ -347,7 +347,7 @@ export const getOrCreateConversation = async (req, res) => {
       isNew = true;
     }
     await conversation.populate("participants", "name email avatar");
-    
+
     // Broadcast conversation creation/found to both participants in real-time
     if (io && (isNew || !conversation.lastMessage)) {
       for (const participant of conversation.participants) {
@@ -355,7 +355,7 @@ export const getOrCreateConversation = async (req, res) => {
         io.to(pid).emit("newConversationCreated", conversation);
       }
     }
-    
+
     res.json({ conversation });
   } catch (err) {
     console.error("getOrCreateConversation error:", err);
