@@ -30,7 +30,7 @@ export default function NewGroup({ admins = [], onClose, socket, user }) {
     setCreating(true);
 
     try {
-      // ✅ Send group creation request to backend
+      // Send group creation request to backend
       const res = await APIADMIN.post("/create-group", {
         name: groupName,
         members: [user._id, ...selectedUsers],
@@ -39,14 +39,14 @@ export default function NewGroup({ admins = [], onClose, socket, user }) {
 
       const createdGroup = res.data.group;
 
-      // ✅ Emit event via socket for real-time update
+      // Emit event via socket for real-time update
       socket.emit("groupCreated", createdGroup);
 
-      alert("✅ Group created successfully!");
+      alert("Group created successfully!");
       onClose();
     } catch (err) {
       console.error("Error creating group:", err);
-      alert("❌ Failed to create group. Please try again.");
+      alert("Failed to create group. Please try again.");
     } finally {
       setCreating(false);
     }

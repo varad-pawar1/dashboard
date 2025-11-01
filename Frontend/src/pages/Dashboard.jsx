@@ -86,12 +86,18 @@ export default function Dashboard() {
 
     // Conversation-based updates
     socket.on("updateConvLastMessage", ({ conversationId, lastMessage }) => {
-      setLastMessages((prev) => ({ ...prev, [conversationId]: lastMessage || null }));
+      setLastMessages((prev) => ({
+        ...prev,
+        [conversationId]: lastMessage || null,
+      }));
     });
     socket.on("updateConvUnread", ({ conversationId, delta }) => {
       setUnreadCounts((prev) => ({
         ...prev,
-        [conversationId]: Math.max((prev[conversationId] || 0) + (delta || 0), 0),
+        [conversationId]: Math.max(
+          (prev[conversationId] || 0) + (delta || 0),
+          0
+        ),
       }));
     });
     socket.on("setConvUnread", ({ conversationId, count }) => {
@@ -112,7 +118,10 @@ export default function Dashboard() {
     setSelectedAdmin(chat);
     setUnreadCounts((prev) => ({ ...prev, [chat._id]: 0 }));
     // Prefer conversation-based mark as read
-    socket.emit("markAsReadByConversation", { userId: user._id, conversationId: chat._id });
+    socket.emit("markAsReadByConversation", {
+      userId: user._id,
+      conversationId: chat._id,
+    });
   };
 
   const handleLogout = () => {
@@ -137,12 +146,17 @@ export default function Dashboard() {
   };
   const handleConversationStarted = (conversationLike) => {
     setLocalConversations((prev) => {
-      const exists = prev.some((c) => String(c._id) === String(conversationLike._id));
+      const exists = prev.some(
+        (c) => String(c._id) === String(conversationLike._id)
+      );
       return exists ? prev : [...prev, conversationLike];
     });
     // Initialize counters to avoid flicker
     setUnreadCounts((prev) => ({ ...prev, [conversationLike._id]: 0 }));
-    setLastMessages((prev) => ({ ...prev, [conversationLike._id]: prev[conversationLike._id] || null }));
+    setLastMessages((prev) => ({
+      ...prev,
+      [conversationLike._id]: prev[conversationLike._id] || null,
+    }));
     setSelectedAdmin(conversationLike);
   };
   // Combine groups and admins into one array
@@ -161,11 +175,12 @@ export default function Dashboard() {
   });
 
   // Merge live-added conversations into the Redux list for rendering
-  const mergedConversations = (
-    usersWithConversations || []
-  ).concat(
+  const mergedConversations = (usersWithConversations || []).concat(
     localConversations.filter(
-      (lc) => !(usersWithConversations || []).some((uc) => String(uc._id) === String(lc._id))
+      (lc) =>
+        !(usersWithConversations || []).some(
+          (uc) => String(uc._id) === String(lc._id)
+        )
     )
   );
 

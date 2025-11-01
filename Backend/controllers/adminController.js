@@ -83,48 +83,6 @@ export const chatUser = async (req, res) => {
   }
 };
 
-export const saveMessage = async ({ sender, receiver, message }) => {
-  try {
-    // Sort IDs to ensure one conversation per pair
-    const participants = [sender, receiver].sort();
-
-    // Try to find existing conversation
-    let conversation = await Conversation.findOne({ participants });
-
-    if (!conversation) {
-      // If no conversation exists, create one
-      conversation = new Conversation({
-        participants,
-      });
-      await conversation.save();
-    }
-
-    // Create new message in Message collection
-    const newMessage = new Message({
-      conversationId: conversation._id,
-      sender,
-      message,
-      readBy: [],
-    });
-
-    await newMessage.save();
-
-    // Update conversation's lastMessage and updatedAt
-    conversation.lastMessage = newMessage._id;
-    conversation.updatedAt = new Date();
-    await conversation.save();
-
-    // Populate sender before returning
-    await newMessage.populate("sender", "name email");
-
-    // Return the newly added message
-    return newMessage;
-  } catch (err) {
-    console.error("saveMessage Error:", err);
-    throw err;
-  }
-};
-
 // Update a message inside a conversation
 export const updateMessage = async (req, res) => {
   const { id } = req.params; // message ID
@@ -361,9 +319,15 @@ export const getOrCreateConversation = async (req, res) => {
     if (!otherId) return res.status(400).json({ message: "otherId required" });
 
     const participants = [userId, otherId].sort();
-    let conversation = await Conversation.findOne({ participants, isGroup: false });
+    let conversation = await Conversation.findOne({
+      participants,
+      isGroup: false,
+    });
     if (!conversation) {
-      conversation = await Conversation.create({ participants, isGroup: false });
+      conversation = await Conversation.create({
+        participants,
+        isGroup: false,
+      });
     }
     res.json({ conversation });
   } catch (err) {
