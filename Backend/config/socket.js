@@ -270,8 +270,15 @@ export const initSocket = (server) => {
       "markAsReadByConversation",
       async ({ userId, conversationId }) => {
         try {
+          console.log("markAsReadByConversation called");
+          console.log("User ID:", userId);
+          console.log("Conversation ID:", conversationId);
+
           const conversation = await Conversation.findById(conversationId);
-          if (!conversation) return;
+          if (!conversation) {
+            console.log("Conversation not found");
+            return;
+          }
 
           const result = await Message.updateMany(
             {
@@ -282,13 +289,24 @@ export const initSocket = (server) => {
             { $addToSet: { readBy: userId } }
           );
 
+          //   console.log(" Messages updated:", result.modifiedCount);
+
           if (result.modifiedCount > 0) {
+            // Emit to all in conversation room with userId who read the messages
+            // console.log(
+            //   " Emitting messagesRead to room:",
+            //   `conv-${conversationId}`
+            // );
             io.to(`conv-${conversationId}`).emit("messagesRead", {
               readerId: userId,
+              conversationId: conversationId.toString(),
             });
+
             io.to(userId).emit("resetConvUnread", {
               conversationId: conversationId.toString(),
             });
+          } else {
+            // console.log(" No messages to mark as read (already read)");
           }
         } catch (err) {
           console.error("markAsReadByConversation error:", err);

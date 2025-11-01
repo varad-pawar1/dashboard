@@ -97,6 +97,7 @@ export default function ChatPanel({ user, admin, onClose }) {
           ...msg,
           sender: msg.sender?._id || msg.sender,
           timestamp: msg.createdAt || msg.timestamp,
+          readBy: msg.readBy || [],
         }));
 
         setMessages(normalized);
@@ -117,6 +118,7 @@ export default function ChatPanel({ user, admin, onClose }) {
         ...msg,
         sender: msg.sender?._id || msg.sender,
         timestamp: msg.createdAt || msg.timestamp,
+        readBy: msg.readBy || [],
       };
       setMessages((prev) =>
         prev.some((m) => String(m._id) === String(normalizedMsg._id))
@@ -132,11 +134,42 @@ export default function ChatPanel({ user, admin, onClose }) {
       }
     });
 
+    // NEW: Listen for messages being read
+    socket.on("messagesRead", ({ readerId, conversationId }) => {
+      // console.log(
+      //   "Messages read by:",
+      //   readerId,
+      //   "in conversation:",
+      //   conversationId
+      // );
+      if (conversationId === admin._id) {
+        setMessages((prev) =>
+          prev.map((msg) => {
+            // Only update messages sent by current user
+            if (String(msg.sender) === String(user._id)) {
+              const readBy = msg.readBy || [];
+              // Check if reader is not already in readBy array
+              if (
+                !readBy.some((r) => String(r._id || r) === String(readerId))
+              ) {
+                return {
+                  ...msg,
+                  readBy: [...readBy, readerId],
+                };
+              }
+            }
+            return msg;
+          })
+        );
+      }
+    });
+
     socket.on("updateMessage", (updatedMsg) => {
       const normalized = {
         ...updatedMsg,
         sender: updatedMsg.sender?._id || updatedMsg.sender,
         timestamp: updatedMsg.createdAt || updatedMsg.timestamp,
+        readBy: updatedMsg.readBy || [],
       };
       setMessages((prev) =>
         prev.map((m) =>
@@ -168,6 +201,7 @@ export default function ChatPanel({ user, admin, onClose }) {
       socket.off("onlineUsers");
       socket.off("userOnline");
       socket.off("userTyping");
+      socket.off("messagesRead");
       socket.disconnect();
     };
   }, [user._id, admin._id]);
@@ -386,6 +420,17 @@ export default function ChatPanel({ user, admin, onClose }) {
     return `${typingUserNames.length} people are typing...`;
   };
 
+  // NEW: Check if message is read
+  const isMessageRead = (msg) => {
+    if (!msg.readBy || msg.readBy.length === 0) return false;
+
+    // Check if any reader is NOT the current user (sender)
+    return msg.readBy.some((reader) => {
+      const readerId = String(reader._id || reader);
+      return readerId !== String(user._id);
+    });
+  };
+
   // UI RENDER
   return (
     <div className="chat-panel-backdrop">
@@ -431,30 +476,54 @@ export default function ChatPanel({ user, admin, onClose }) {
                 ref={index === messages.length - 1 ? scrollRef : null}
                 onClick={(e) => handleMessageClick(e, msg)}
               >
-                {msg.fileUrl ? (
-                  msg.fileType === "image" ? (
-                    <img
-                      src={msg.fileUrl}
-                      alt="upload"
-                      className="chat-image"
-                    />
-                  ) : msg.fileType === "video" ? (
-                    <video src={msg.fileUrl} controls className="chat-video" />
-                  ) : msg.fileType === "document" ||
-                    msg.fileType === "other" ? (
-                    <a
-                      href={msg.fileUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="file-link"
-                    >
-                      <i className="fa-solid fa-file"></i>
-                      <span>{msg.fileName || "Download File"}</span>
-                    </a>
-                  ) : null
-                ) : (
-                  <span>{msg.message}</span>
-                )}
+                <div className="message-content">
+                  {msg.fileUrl ? (
+                    msg.fileType === "image" ? (
+                      <img
+                        src={msg.fileUrl}
+                        alt="upload"
+                        className="chat-image"
+                      />
+                    ) : msg.fileType === "video" ? (
+                      <video
+                        src={msg.fileUrl}
+                        controls
+                        className="chat-video"
+                      />
+                    ) : msg.fileType === "document" ||
+                      msg.fileType === "other" ? (
+                      <a
+                        href={msg.fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="file-link"
+                      >
+                        <i className="fa-solid fa-file"></i>
+                        <span>{msg.fileName || "Download File"}</span>
+                      </a>
+                    ) : null
+                  ) : (
+                    <span>{msg.message}</span>
+                  )}
+
+                  {/* NEW: Show read receipts for sent messages */}
+                  {isSentByUser && (
+                    <span className="message-status">
+                      {isMessageRead(msg) ? (
+                        // Double blue check for read
+                        <span className="read-checks">
+                          <i className="fa-solid fa-check"></i>
+                          <i className="fa-solid fa-check"></i>
+                        </span>
+                      ) : (
+                        // Single gray check for sent but unread
+                        <span className="unread-check">
+                          <i className="fa-solid fa-check"></i>
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </div>
 
                 {isSentByUser && menuVisibleId === msg._id && !isEditing && (
                   <div

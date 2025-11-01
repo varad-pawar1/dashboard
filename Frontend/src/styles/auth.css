@@ -149,3 +149,35 @@
   color: #6b7280;
   font-style: italic;
 }
+
+.message-content {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.message-status {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
+.read-checks {
+  color: #3b82f6;
+  position: relative;
+  display: inline-flex;
+}
+
+.read-checks i:first-child {
+  margin-right: -6px;
+}
+
+.unread-check {
+  color: #9ca3af;
+}
+
+.chat-message.sent {
+  align-items: flex-end;
+}
