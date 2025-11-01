@@ -12,6 +12,7 @@ export default function ChatPanel({ user, admin, onClose }) {
   const [preview, setPreview] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
 
+  const [sending, setSending] = useState(false);
   const scrollRef = useRef();
   const inputRef = useRef();
   const fileInputRef = useRef();
@@ -48,7 +49,7 @@ export default function ChatPanel({ user, admin, onClose }) {
 
         setMessages(normalized);
 
-        // ✅ Mark messages as read for the current user
+        // Mark messages as read for the current user
         socket.emit("markAsReadByConversation", {
           userId: user._id,
           conversationId: admin._id,
@@ -217,6 +218,7 @@ export default function ChatPanel({ user, admin, onClose }) {
   // Handle file uploads without creating duplicate messages
   const handleFileSend = async () => {
     if (!selectedFile) return;
+    setSending(true);
 
     try {
       // Create FormData to send file
@@ -266,6 +268,9 @@ export default function ChatPanel({ user, admin, onClose }) {
     } catch (err) {
       console.error("Error uploading file:", err);
       alert("Failed to send file. Please try again.");
+    } finally {
+      setSending(false);
+      showFileDialog();
     }
   };
 
@@ -382,8 +387,8 @@ export default function ChatPanel({ user, admin, onClose }) {
             <button className="close-btn" onClick={handleCancelPreview}>
               <i className="fa-solid fa-circle-xmark"></i>
             </button>
-            <button className="send-btn" onClick={handleFileSend}>
-              Send
+            <button className="create-btn" onClick={handleFileSend}>
+              {sending ? "Sending..." : "Send"}
             </button>
           </div>
         )}

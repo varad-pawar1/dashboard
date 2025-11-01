@@ -34,9 +34,6 @@ app.locals.io = io;
 // Export io for use in controllers
 export { io };
 
-// Helper to get deterministic room ID
-const getRoomId = (user1, user2) => [user1, user2].sort().join("-");
-
 io.on("connection", (socket) => {
   // console.log(" Client connected:", socket.id);
 
@@ -303,7 +300,7 @@ io.on("connection", (socket) => {
         .populate("participants", "name email avatar")
         .populate("createdBy", "name email")
         .populate("admins", "name email");
-      
+
       if (!conversation || !conversation.isGroup) return;
 
       // Broadcast to all participants so they see the group immediately
