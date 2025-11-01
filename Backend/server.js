@@ -28,6 +28,12 @@ const io = new Server(server, {
   cors: { origin: process.env.FRONTEND_URL, credentials: true },
 });
 
+// Attach io to app for use in controllers
+app.locals.io = io;
+
+// Export io for use in controllers
+export { io };
+
 // Helper to get deterministic room ID
 const getRoomId = (user1, user2) => [user1, user2].sort().join("-");
 
@@ -290,7 +296,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Handle group creation notification - broadcast to all participants
+  // Handle group creation notification - broadcast to all participants (backup if controller doesn't emit)
   socket.on("groupCreated", async (groupData) => {
     try {
       const conversation = await Conversation.findById(groupData._id)
@@ -302,7 +308,7 @@ io.on("connection", (socket) => {
 
       // Broadcast to all participants so they see the group immediately
       for (const participant of conversation.participants) {
-        const pid = participant.toString();
+        const pid = participant._id?.toString() || participant.toString();
         io.to(pid).emit("newGroupCreated", conversation);
       }
     } catch (err) {

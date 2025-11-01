@@ -286,6 +286,7 @@ export const resetPassword = async (req, res) => {
 export const createGroup = async (req, res) => {
   try {
     const { name, members, createdBy } = req.body;
+    const io = req.app.locals.io;
 
     if (!name || !members || members.length < 2) {
       return res
@@ -306,6 +307,15 @@ export const createGroup = async (req, res) => {
     await group.populate("participants", "name email avatar");
     await group.populate("createdBy", "name email");
     await group.populate("admins", "name email");
+
+    // Broadcast group creation to all participants in real-time
+    if (io) {
+      for (const participant of group.participants) {
+        const pid = participant._id?.toString() || participant.toString();
+        io.to(pid).emit("newGroupCreated", group);
+        console.log(`Broadcasting newGroupCreated to participant: ${pid}`);
+      }
+    }
 
     res.status(201).json({ success: true, group });
   } catch (error) {
