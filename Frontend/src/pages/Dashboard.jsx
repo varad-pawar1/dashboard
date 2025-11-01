@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { logout } from "../features/auth/authActions";
@@ -11,6 +11,7 @@ import ChatPanel from "./ChatPanel";
 import "../styles/dashboard.css";
 import { io } from "socket.io-client";
 import NewGroup from "./NewGroup";
+import store from "../features/app/store";
 
 let socket;
 
@@ -25,7 +26,7 @@ export default function Dashboard() {
   const [unreadCounts, setUnreadCounts] = useState({});
   const [lastMessages, setLastMessages] = useState({});
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
-  const [localConversations, setLocalConversations] = useState([]);
+  const pendingSelectedId = useRef(null); // Track conversation ID that should be selected after refetch
 
   useEffect(() => {
     if (!user?._id) return;
@@ -108,12 +109,14 @@ export default function Dashboard() {
     });
 
     // Listen for new group creation (broadcasted to all participants)
-    socket.on("newGroupCreated", (group) => {
-      setLocalConversations((prev) => {
-        const exists = prev.some((c) => String(c._id) === String(group._id));
-        if (exists) return prev;
-        return [...prev, group];
-      });
+    socket.on("newGroupCreated", async (group) => {
+      // Refetch conversations to ensure consistency
+      try {
+        await dispatch(fetchDashboardData());
+      } catch (error) {
+        console.error("Error refetching conversations after group creation:", error);
+      }
+      // Initialize unread and last message for new group
       setUnreadCounts((prev) => ({ ...prev, [group._id]: 0 }));
       setLastMessages((prev) => ({
         ...prev,
@@ -122,14 +125,14 @@ export default function Dashboard() {
     });
 
     // Listen for new private conversation creation (broadcasted to both participants)
-    socket.on("newConversationCreated", (conversation) => {
-      setLocalConversations((prev) => {
-        const exists = prev.some(
-          (c) => String(c._id) === String(conversation._id)
-        );
-        if (exists) return prev;
-        return [...prev, conversation];
-      });
+    socket.on("newConversationCreated", async (conversation) => {
+      // Refetch conversations to ensure consistency
+      try {
+        await dispatch(fetchDashboardData());
+      } catch (error) {
+        console.error("Error refetching conversations after conversation creation:", error);
+      }
+      // Initialize unread and last message for new conversation
       setUnreadCounts((prev) => ({ ...prev, [conversation._id]: 0 }));
       setLastMessages((prev) => ({
         ...prev,
@@ -138,11 +141,38 @@ export default function Dashboard() {
     });
 
     return () => socket.disconnect();
-  }, [user]);
+  }, [user, dispatch]);
 
   useEffect(() => {
     dispatch(fetchDashboardData()).catch(() => navigate("/login"));
   }, [dispatch, navigate]);
+
+  // Sync selectedAdmin when conversations are refetched and we have a pending selection
+  useEffect(() => {
+    if (pendingSelectedId.current) {
+      const state = store.getState();
+      const { groups: updatedGroups, usersWithConversations: updatedConversations } = state.admin;
+      
+      // Try to find in groups first
+      const foundInGroups = updatedGroups?.find(
+        (g) => String(g._id) === String(pendingSelectedId.current)
+      );
+      if (foundInGroups) {
+        setSelectedAdmin(foundInGroups);
+        pendingSelectedId.current = null;
+        return;
+      }
+      
+      // Then try conversations
+      const foundInConversations = updatedConversations?.find(
+        (c) => String(c._id) === String(pendingSelectedId.current)
+      );
+      if (foundInConversations) {
+        setSelectedAdmin(foundInConversations);
+        pendingSelectedId.current = null;
+      }
+    }
+  }, [groups, usersWithConversations]);
 
   const handleSelectAdmin = (chat) => {
     setSelectedAdmin(chat);
@@ -174,33 +204,64 @@ export default function Dashboard() {
   const handleCloseGroupCreator = () => {
     setIsCreatingGroup(false);
   };
-  const handleGroupCreated = (group) => {
-    setLocalConversations((prev) => {
-      const exists = prev.some((c) => String(c._id) === String(group._id));
-      return exists ? prev : [...prev, group];
-    });
-    setUnreadCounts((prev) => ({ ...prev, [group._id]: 0 }));
-    setLastMessages((prev) => ({
-      ...prev,
-      [group._id]: prev[group._id] || null,
-    }));
-    setSelectedAdmin(group);
-    setIsCreatingGroup(false);
+  const handleGroupCreated = async (group) => {
+    try {
+      // Set pending selection to restore after refetch
+      pendingSelectedId.current = group._id;
+      
+      // Refetch all conversations from API to ensure consistency
+      await dispatch(fetchDashboardData());
+      
+      setIsCreatingGroup(false);
+      
+      // Initialize unread and last message
+      setUnreadCounts((prev) => ({ ...prev, [group._id]: 0 }));
+      setLastMessages((prev) => ({
+        ...prev,
+        [group._id]: prev[group._id] || null,
+      }));
+      
+      // The useEffect will handle setting selectedAdmin when groups update
+    } catch (error) {
+      console.error("Error refetching conversations after group creation:", error);
+      // Fallback: use the group from response
+      pendingSelectedId.current = null;
+      setSelectedAdmin(group);
+      setIsCreatingGroup(false);
+      setUnreadCounts((prev) => ({ ...prev, [group._id]: 0 }));
+      setLastMessages((prev) => ({
+        ...prev,
+        [group._id]: prev[group._id] || null,
+      }));
+    }
   };
-  const handleConversationStarted = (conversationLike) => {
-    setLocalConversations((prev) => {
-      const exists = prev.some(
-        (c) => String(c._id) === String(conversationLike._id)
-      );
-      return exists ? prev : [...prev, conversationLike];
-    });
-    // Initialize counters to avoid flicker
-    setUnreadCounts((prev) => ({ ...prev, [conversationLike._id]: 0 }));
-    setLastMessages((prev) => ({
-      ...prev,
-      [conversationLike._id]: prev[conversationLike._id] || null,
-    }));
-    setSelectedAdmin(conversationLike);
+  const handleConversationStarted = async (conversationLike) => {
+    try {
+      // Set pending selection to restore after refetch
+      pendingSelectedId.current = conversationLike._id;
+      
+      // Refetch all conversations from API to ensure consistency
+      await dispatch(fetchDashboardData());
+      
+      // Initialize counters to avoid flicker
+      setUnreadCounts((prev) => ({ ...prev, [conversationLike._id]: 0 }));
+      setLastMessages((prev) => ({
+        ...prev,
+        [conversationLike._id]: prev[conversationLike._id] || null,
+      }));
+      
+      // The useEffect will handle setting selectedAdmin when conversations update
+    } catch (error) {
+      console.error("Error refetching conversations after starting conversation:", error);
+      // Fallback: use the conversation from response
+      pendingSelectedId.current = null;
+      setSelectedAdmin(conversationLike);
+      setUnreadCounts((prev) => ({ ...prev, [conversationLike._id]: 0 }));
+      setLastMessages((prev) => ({
+        ...prev,
+        [conversationLike._id]: prev[conversationLike._id] || null,
+      }));
+    }
   };
   // Combine groups and admins into one array
   const combinedChats = [
@@ -217,16 +278,6 @@ export default function Dashboard() {
     return new Date(timeB) - new Date(timeA);
   });
 
-  // Merge live-added conversations into the Redux list for rendering
-  const mergedConversations = (usersWithConversations || []).concat(
-    localConversations.filter(
-      (lc) =>
-        !(usersWithConversations || []).some(
-          (uc) => String(uc._id) === String(lc._id)
-        )
-    )
-  );
-
   // Sort conversations by latest message time (socket -> API fallback -> updatedAt)
   const getTime = (c) => {
     const lm = lastMessages?.[c._id];
@@ -237,7 +288,7 @@ export default function Dashboard() {
       0
     );
   };
-  const sortedConversations = mergedConversations
+  const sortedConversations = (usersWithConversations || [])
     .slice()
     .sort((a, b) => new Date(getTime(b)) - new Date(getTime(a)));
 
