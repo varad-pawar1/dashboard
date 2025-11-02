@@ -463,6 +463,7 @@ export default function ChatPanel({ user, admin, onClose }) {
         {/* Chat Messages */}
         <div className="chat-messages">
           {messages.map((msg, index) => {
+            console.log("Rendering message:", msg);
             const isSentByUser = String(msg.sender) === String(user._id);
             const isEditingThis =
               editingMessageId && String(editingMessageId) === String(msg._id);
@@ -503,7 +504,16 @@ export default function ChatPanel({ user, admin, onClose }) {
                       </a>
                     ) : null
                   ) : (
-                    <span>{msg.message}</span>
+                    <>
+                      <span className="message">{msg.message}</span>
+                      <span className="message-timestamp">
+                        {new Date(msg.timestamp).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          hour12: false,
+                        })}
+                      </span>
+                    </>
                   )}
 
                   {/* NEW: Show read receipts for sent messages */}

@@ -270,13 +270,13 @@ export const initSocket = (server) => {
       "markAsReadByConversation",
       async ({ userId, conversationId }) => {
         try {
-          console.log("markAsReadByConversation called");
-          console.log("User ID:", userId);
-          console.log("Conversation ID:", conversationId);
+          // console.log("markAsReadByConversation called");
+          // console.log("User ID:", userId);
+          // console.log("Conversation ID:", conversationId);
 
           const conversation = await Conversation.findById(conversationId);
           if (!conversation) {
-            console.log("Conversation not found");
+            // console.log("Conversation not found");
             return;
           }
 

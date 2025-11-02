@@ -181,3 +181,19 @@
 .chat-message.sent {
   align-items: flex-end;
 }
+
+.message-timestamp,
+.message-status {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  font-size: 10px;
+}
+.message-timestamp {
+  right: 20px;
+}
+
+.chat-message.sent,
+.chat-message.received {
+  min-width: 30px;
+}
