@@ -7,15 +7,12 @@ const userSchema = new mongoose.Schema({
   password: {
     type: String,
     required: function () {
-      return !this.googleId && !this.githubId;
+      return !this.googleId;
     },
   },
   avatar: { type: String },
   googleId: { type: String, default: null },
-  githubId: { type: String, default: null },
-  providers: [
-    { type: String, enum: ["email", "google", "github"], required: true },
-  ],
+  providers: [{ type: String, enum: ["email", "google"], required: true }],
   // --- For email verification ---
   isVerified: { type: Boolean, default: false },
   otp: { type: String }, // verification OTP

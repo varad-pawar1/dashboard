@@ -1,5 +1,4 @@
 import API from "../../api/auth";
-import APIADMIN from "../../api/admin";
 import {
   SET_FIELD,
   RESET_FORM,
@@ -70,6 +69,24 @@ export const loginUser = (data) => async (dispatch) => {
     return res.data.user;
   } catch (err) {
     const message = err.response?.data?.message || "Login failed";
+    dispatch({ type: LOGIN_FAILURE, payload: message });
+    return Promise.reject(message);
+  }
+};
+
+// ----- Google Login -----
+export const googleLoginAction = (credential) => async (dispatch) => {
+  dispatch({ type: LOGIN_REQUEST });
+  try {
+    const res = await API.post(
+      "/google",
+      { credential },
+      { withCredentials: true }
+    );
+    dispatch({ type: LOGIN_SUCCESS, payload: res.data.user });
+    return res.data.user;
+  } catch (err) {
+    const message = err.response?.data?.message || "Google login failed";
     dispatch({ type: LOGIN_FAILURE, payload: message });
     return Promise.reject(message);
   }

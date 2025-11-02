@@ -1,15 +1,59 @@
 import { useDispatch, useSelector } from "react-redux";
 import { Link, useNavigate } from "react-router-dom";
+import { useEffect } from "react";
 import InputField from "../components/InputField";
 import Button from "../components/Button";
-import { loginUser, setField } from "../features/auth/authActions";
+import {
+  loginUser,
+  setField,
+  googleLoginAction,
+} from "../features/auth/authActions";
 
 export default function Login() {
-  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
-
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { form, loading, error } = useSelector((state) => state.auth);
+
+  // Initialize Google Sign-In
+  useEffect(() => {
+    // Load Google Sign-In script
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    document.body.appendChild(script);
+
+    script.onload = () => {
+      window.google.accounts.id.initialize({
+        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+        callback: handleGoogleResponse,
+      });
+
+      window.google.accounts.id.renderButton(
+        document.getElementById("google-signin-button"),
+        {
+          theme: "outline",
+          size: "large",
+          text: "signin_with",
+          shape: "rectangular",
+        }
+      );
+    };
+
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
+
+  // Handle Google Sign-In Response
+  const handleGoogleResponse = async (response) => {
+    try {
+      await dispatch(googleLoginAction(response.credential));
+      navigate("/dashboard");
+    } catch (err) {
+      alert(err);
+    }
+  };
 
   // Handle Login Submit
   const handleLogin = async (e) => {
@@ -18,21 +62,8 @@ export default function Login() {
       await dispatch(loginUser(form));
       navigate("/dashboard");
     } catch (err) {
-      if (err.includes("Google"))
-        window.location.href = `${BACKEND_URL}/auth/google`;
-      else if (err.includes("GitHub"))
-        window.location.href = `${BACKEND_URL}/auth/github`;
-      else alert(err);
+      alert(err);
     }
-  };
-
-  // Handle OAuth logins
-  const handleGoogleLogin = () => {
-    window.location.href = `${BACKEND_URL}/auth/google`;
-  };
-
-  const handleGithubLogin = () => {
-    window.location.href = `${BACKEND_URL}/auth/github`;
   };
 
   return (
@@ -67,21 +98,12 @@ export default function Login() {
         Forgot Password? <Link to="/forgot-password">Click here</Link>
       </p>
 
-      <div className="social-icon">
-        <Button
-          onClick={handleGoogleLogin}
-          variant="google-btn"
-          label={<i className="fa-brands fa-google"></i>}
-        />
-        <Button
-          onClick={handleGithubLogin}
-          variant="github-btn"
-          label={<i className="fa-brands fa-github"></i>}
-        />
+      <div className="social-login">
+        <div id="google-signin-button"></div>
       </div>
 
       <p>
-        Don’t have an account? <Link to="/signup">Sign up</Link>
+        Don't have an account? <Link to="/signup">Sign up</Link>
       </p>
     </div>
   );

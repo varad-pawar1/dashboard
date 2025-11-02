@@ -1,12 +1,12 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
-import passport from "passport";
-import { Strategy as GoogleStrategy } from "passport-google-oauth20";
-import { Strategy as GitHubStrategy } from "passport-github2";
-
+import { OAuth2Client } from "google-auth-library";
 import dotenv from "dotenv";
 import { sendOtpEmail, sendWelcomeEmail } from "../utils/mailer.js";
+
 dotenv.config();
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // REGISTER USER
 export const registerUser = async (req, res) => {
@@ -186,7 +186,6 @@ export const resetPassword = async (req, res) => {
     if (!user.isResetVerified)
       return res.status(400).json({ message: "OTP not verified" });
 
-    // Do NOT hash manually, let pre-save hook handle it
     user.password = newPassword;
     user.resetOtp = undefined;
     user.resetOtpExpires = undefined;
@@ -201,66 +200,55 @@ export const resetPassword = async (req, res) => {
   }
 };
 
-//  GOOGLE STRATEGY
-passport.serializeUser((user, done) => done(null, user._id));
-passport.deserializeUser(async (id, done) => {
-  const user = await User.findById(id);
-  done(null, user);
-});
+// GOOGLE LOGIN - Verify Token
+export const googleLogin = async (req, res) => {
+  try {
+    const { credential } = req.body;
 
-passport.use(
-  new GoogleStrategy(
-    {
-      clientID: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL: `${process.env.BACKEND_URL}/auth/google/callback`,
-    },
-    async (accessToken, refreshToken, profile, done) => {
-      try {
-        const email = profile.emails[0].value;
-        let user = await User.findOne({ email });
-        if (!user) {
-          user = await User.create({
-            name: profile.displayName,
-            email,
-            avatar: profile.photos[0]?.value || "",
-            googleId: profile.id,
-            providers: ["google"],
-          });
-        } else {
-          // Existing user → add Google if not already added
-          if (!user.providers.includes("google")) {
-            user.providers.push("google");
-            user.googleId = profile.id;
-            await user.save();
-          }
-        }
+    if (!credential) {
+      return res.status(400).json({ message: "Credential is required" });
+    }
 
-        done(null, user);
-      } catch (err) {
-        done(err, null);
+    // Verify the Google token
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    const { sub: googleId, email, name, picture } = payload;
+
+    // Find or create user
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      // Create new user
+      user = await User.create({
+        name,
+        email,
+        avatar: picture || "",
+        googleId,
+        providers: ["google"],
+        isVerified: true, // Google accounts are pre-verified
+      });
+    } else {
+      // Update existing user
+      if (!user.providers.includes("google")) {
+        user.providers.push("google");
+        user.googleId = googleId;
+        user.isVerified = true; // Mark as verified if logging in with Google
+        await user.save();
       }
     }
-  )
-);
 
-//  GOOGLE LOGIN HANDLERS
-export const googleAuth = (req, res, next) => {
-  passport.authenticate("google", { scope: ["profile", "email"] })(
-    req,
-    res,
-    next
-  );
-};
-
-export const googleAuthCallback = (req, res, next) => {
-  passport.authenticate("google", { failureRedirect: "/" })(req, res, () => {
+    // Generate JWT token
     const token = jwt.sign(
-      { id: req.user._id, email: req.user.email, name: req.user.name },
+      { id: user._id, email: user.email, name: user.name },
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
     );
 
+    // Set cookie
     res.cookie("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -268,67 +256,12 @@ export const googleAuthCallback = (req, res, next) => {
       maxAge: 24 * 60 * 60 * 1000,
     });
 
-    res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
-  });
-};
-
-// ===== Passport GitHub Strategy =====
-passport.use(
-  new GitHubStrategy(
-    {
-      clientID: process.env.GITHUB_CLIENT_ID,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET,
-      callbackURL: `${process.env.BACKEND_URL}/auth/github/callback`,
-      scope: ["user:email"],
-    },
-    async (accessToken, refreshToken, profile, done) => {
-      try {
-        const email = profile.emails[0].value;
-        let user = await User.findOne({ email });
-        if (!user) {
-          user = await User.create({
-            name: profile.displayName || profile.username,
-            email,
-            avatar: profile.photos[0]?.value || "",
-            githubId: profile.id,
-            providers: ["github"],
-          });
-        } else {
-          // Existing user → add GitHub if not already added
-          if (!user.providers.includes("github")) {
-            user.providers.push("github");
-            user.githubId = profile.id;
-            await user.save();
-          }
-        }
-        done(null, user);
-      } catch (err) {
-        done(err, null);
-      }
-    }
-  )
-);
-
-// ===== Routes Handlers =====
-export const githubAuth = (req, res, next) => {
-  passport.authenticate("github")(req, res, next);
-};
-
-export const githubAuthCallback = (req, res, next) => {
-  passport.authenticate("github", { failureRedirect: "/" })(req, res, () => {
-    const token = jwt.sign(
-      { id: req.user._id, email: req.user.email, name: req.user.name },
-      process.env.JWT_SECRET,
-      { expiresIn: "1d" }
-    );
-
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 24 * 60 * 60 * 1000,
+    res.status(200).json({
+      message: "Login successful",
+      user: { id: user._id, name: user.name, email: user.email },
     });
-
-    res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
-  });
+  } catch (err) {
+    console.error("Google Login Error:", err);
+    res.status(500).json({ message: "Google authentication failed" });
+  }
 };
