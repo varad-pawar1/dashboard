@@ -28,7 +28,7 @@ export default function Chatbot() {
     } catch (err) {
       const errorMsg = {
         sender: "bot",
-        text: "⚠️ Error getting response from AI.",
+        text: "Error getting response from AI.",
       };
       setChatMessages((prev) => [...prev, errorMsg]);
       console.error("Chatbot error:", err);
