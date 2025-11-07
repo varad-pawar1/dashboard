@@ -15,6 +15,7 @@ import { upload } from "../middleware/upload.js";
 import { chatbot } from "../config/openai.js";
 import { getSystemPrompt } from "../config/systemprompt.js";
 import { createCourseWithAI } from "../controllers/CreatingAI.js";
+import vercelAi from "../controllers/vercelAi.js";
 const router = express.Router();
 
 // Admin routes
@@ -34,4 +35,7 @@ router.post("/chatbot", chatbot);
 router.post("/systemprompt", getSystemPrompt);
 
 router.post("/CreatingAI", protect, createCourseWithAI);
+
+router.post("/vercelAi", vercelAi);
+
 export default router;
